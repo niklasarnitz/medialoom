@@ -93,7 +93,6 @@ export const createPlanRequestSchema = z.object({
 export type CreatePlanInput = z.input<typeof createPlanRequestSchema>;
 export type CreatePlanRequest = z.infer<typeof createPlanRequestSchema>;
 
-
 export const listPlansQuerySchema = z.object({
   mediaItemId: z.string().optional(),
   status: planStatusSchema.optional(),

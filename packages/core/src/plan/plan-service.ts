@@ -1,7 +1,6 @@
 import path from 'node:path';
 import {
   type CreatePlanInput,
-  type CreatePlanRequest,
   createPlanRequestSchema,
   type ListPlansQuery,
   type Operation,
@@ -9,6 +8,7 @@ import {
   operationPlanDtoSchema,
   type PlanValidationResult,
 } from '@medialoom/contracts';
+
 import {
   defaultInventoryRepository,
   defaultPlanRepository,
@@ -41,7 +41,6 @@ export class PlanService {
   }
 
   async createPlan(rawInput: CreatePlanInput): Promise<OperationPlanDto> {
-
     const input = createPlanRequestSchema.parse(rawInput);
     const profileName = input.profile ?? 'jellyfin';
     const destinationRoot = path.resolve(input.destination);
