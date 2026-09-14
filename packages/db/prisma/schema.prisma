@@ -16,49 +16,83 @@ model SystemMetadata {
 }
 
 model Movie {
-  id             String      @id @default(cuid())
-  title          String
-  originalTitle  String?
-  year           Int?
-  runtimeMinutes Int?
-  overview       String?
-  tmdbId         Int?        @unique
-  imdbId         String?     @unique
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  mediaItems     MediaItem[]
-}
-
-model MediaItem {
-  id              String   @id @default(cuid())
-  movieId         String?
-  status          String   @default("UNMATCHED")
+  id              String    @id @default(cuid())
+  title           String
+  originalTitle   String?
+  year            Int?
+  runtimeMinutes  Int?
+  overview        String?
+  status          String    @default("UNMATCHED")
   matchConfidence Float?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  tmdbId          Int?      @unique
+  imdbId          String?   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  movie           Movie?   @relation(fields: [movieId], references: [id], onDelete: SetNull)
-  assets          Asset[]
+  editions        Edition[]
 
-  @@index([movieId])
   @@index([status])
 }
 
+model Edition {
+  id            String         @id @default(cuid())
+  movieId       String
+  name          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  movie         Movie          @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  mediaVersions MediaVersion[]
+
+  @@index([movieId])
+}
+
+model MediaVersion {
+  id        String   @id @default(cuid())
+  editionId String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  edition   Edition  @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  assets    Asset[]
+
+  @@index([editionId])
+}
+
 model Asset {
-  id          String    @id @default(cuid())
-  mediaItemId String
-  type        String    @default("VIDEO")
-  path        String    @unique
-  sizeBytes   BigInt
-  mtime       DateTime
-  present     Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String                  @id @default(cuid())
+  mediaVersionId    String
+  type              String                  @default("VIDEO")
+  path              String                  @unique
+  sizeBytes         BigInt
+  mtime             DateTime
+  present           Boolean                 @default(true)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
-  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  mediaVersion      MediaVersion            @relation(fields: [mediaVersionId], references: [id], onDelete: Cascade)
+  technicalMetadata MediaTechnicalMetadata?
 
-  @@index([mediaItemId])
+  @@index([mediaVersionId])
+}
+
+model MediaTechnicalMetadata {
+  id              String   @id @default(cuid())
+  assetId         String   @unique
+  container       String?
+  formatName      String?
+  durationSeconds Float?
+  bitRate         BigInt?
+  width           Int?
+  height          Int?
+  videoCodec      String?
+  audioCodec      String?
+  audioChannels   Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  asset           Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
 }
 
 model Scan {
