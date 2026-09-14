@@ -97,6 +97,10 @@
     "packages/providers": {
       "name": "@medialoom/providers",
       "version": "0.1.0",
+      "dependencies": {
+        "@medialoom/contracts": "workspace:*",
+        "zod": "^3.24.2",
+      },
     },
   },
   "packages": {
