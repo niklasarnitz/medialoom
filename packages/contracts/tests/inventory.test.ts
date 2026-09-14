@@ -2,15 +2,19 @@ import { describe, expect, it } from 'bun:test';
 import {
   AssetType,
   assetSchema,
+  assetWithMetadataSchema,
   createAssetInputSchema,
   createEditionInputSchema,
+  createMediaFilenameMetadataInputSchema,
   createMediaVersionInputSchema,
   createMovieInputSchema,
   createScanInputSchema,
   editionSchema,
+  mediaFilenameMetadataSchema,
   mediaTechnicalMetadataSchema,
   mediaVersionSchema,
   movieWithEditionsSchema,
+  scanResultSchema,
   scanSchema,
 } from '../src';
 
@@ -59,6 +63,37 @@ describe('Inventory Domain Contracts', () => {
       expect(parsed.assetId).toBe('asset_1');
       expect(parsed.videoCodec).toBe('hevc');
       expect(parsed.audioChannels).toBe(8);
+    });
+
+    it('validates 1:1 MediaFilenameMetadata', () => {
+      const raw = {
+        id: 'fn_1',
+        assetId: 'asset_1',
+        title: 'The Matrix',
+        year: 1999,
+        type: 'movie',
+        edition: null,
+        screenSize: '1080p',
+        source: 'Blu-ray',
+        videoCodec: 'H.264',
+        audioCodec: 'AC3',
+        audioChannels: '5.1',
+        releaseGroup: 'GROUP',
+        streamingService: null,
+        container: 'mkv',
+        language: 'English',
+        rawJson: '{"title":"The Matrix"}',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const parsed = mediaFilenameMetadataSchema.parse(raw);
+      expect(parsed.assetId).toBe('asset_1');
+      expect(parsed.title).toBe('The Matrix');
+      expect(parsed.year).toBe(1999);
+      expect(parsed.screenSize).toBe('1080p');
+      expect(parsed.source).toBe('Blu-ray');
+      expect(parsed.releaseGroup).toBe('GROUP');
     });
 
     it('allows extensible custom asset types', () => {
@@ -225,6 +260,23 @@ describe('Inventory Domain Contracts', () => {
       const parsed = scanSchema.parse(scan);
       expect(parsed.status).toBe('COMPLETED');
       expect(parsed.discoveredCount).toBe(15);
+    });
+
+    it('validates a ScanResult output', () => {
+      const result = {
+        schemaVersion: 1,
+        scanId: 'scan_123',
+        discovered: 5,
+        created: 3,
+        updated: 2,
+        failed: 0,
+      };
+
+      const parsed = scanResultSchema.parse(result);
+      expect(parsed.schemaVersion).toBe(1);
+      expect(parsed.scanId).toBe('scan_123');
+      expect(parsed.discovered).toBe(5);
+      expect(parsed.created).toBe(3);
     });
   });
 });

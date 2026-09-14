@@ -73,6 +73,7 @@ model Asset {
 
   mediaVersion      MediaVersion            @relation(fields: [mediaVersionId], references: [id], onDelete: Cascade)
   technicalMetadata MediaTechnicalMetadata?
+  filenameMetadata  MediaFilenameMetadata?
 
   @@index([mediaVersionId])
 }
@@ -93,6 +94,29 @@ model MediaTechnicalMetadata {
   updatedAt       DateTime @updatedAt
 
   asset           Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model MediaFilenameMetadata {
+  id               String   @id @default(cuid())
+  assetId          String   @unique
+  title            String?
+  year             Int?
+  type             String?
+  edition          String?
+  screenSize       String?
+  source           String?
+  videoCodec       String?
+  audioCodec       String?
+  audioChannels    String?
+  releaseGroup     String?
+  streamingService String?
+  container        String?
+  language         String?
+  rawJson          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  asset            Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
 }
 
 model Scan {

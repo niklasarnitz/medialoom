@@ -67,6 +67,74 @@ export type UpdateMediaTechnicalMetadataInput = z.input<
   typeof updateMediaTechnicalMetadataInputSchema
 >;
 
+// ============================================================================
+// Filename-Derived Metadata Contracts (GuessIt)
+// ============================================================================
+
+export const mediaFilenameMetadataSchema = z.object({
+  id: z.string().min(1),
+  assetId: z.string().min(1),
+  title: z.string().nullable().optional(),
+  year: z.number().int().nullable().optional(),
+  type: z.string().nullable().optional(),
+  edition: z.string().nullable().optional(),
+  screenSize: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  videoCodec: z.string().nullable().optional(),
+  audioCodec: z.string().nullable().optional(),
+  audioChannels: z.string().nullable().optional(),
+  releaseGroup: z.string().nullable().optional(),
+  streamingService: z.string().nullable().optional(),
+  container: z.string().nullable().optional(),
+  language: z.string().nullable().optional(),
+  rawJson: z.string().nullable().optional(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type MediaFilenameMetadata = z.infer<typeof mediaFilenameMetadataSchema>;
+
+export const createMediaFilenameMetadataInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  assetId: z.string().min(1),
+  title: z.string().nullable().optional(),
+  year: z.number().int().nullable().optional(),
+  type: z.string().nullable().optional(),
+  edition: z.string().nullable().optional(),
+  screenSize: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  videoCodec: z.string().nullable().optional(),
+  audioCodec: z.string().nullable().optional(),
+  audioChannels: z.string().nullable().optional(),
+  releaseGroup: z.string().nullable().optional(),
+  streamingService: z.string().nullable().optional(),
+  container: z.string().nullable().optional(),
+  language: z.string().nullable().optional(),
+  rawJson: z.string().nullable().optional(),
+});
+export type CreateMediaFilenameMetadataInput = z.input<
+  typeof createMediaFilenameMetadataInputSchema
+>;
+
+export const updateMediaFilenameMetadataInputSchema = z.object({
+  title: z.string().nullable().optional(),
+  year: z.number().int().nullable().optional(),
+  type: z.string().nullable().optional(),
+  edition: z.string().nullable().optional(),
+  screenSize: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  videoCodec: z.string().nullable().optional(),
+  audioCodec: z.string().nullable().optional(),
+  audioChannels: z.string().nullable().optional(),
+  releaseGroup: z.string().nullable().optional(),
+  streamingService: z.string().nullable().optional(),
+  container: z.string().nullable().optional(),
+  language: z.string().nullable().optional(),
+  rawJson: z.string().nullable().optional(),
+});
+export type UpdateMediaFilenameMetadataInput = z.input<
+  typeof updateMediaFilenameMetadataInputSchema
+>;
+
 export const assetSchema = z.object({
   id: z.string().min(1),
   mediaVersionId: z.string().min(1),
@@ -82,8 +150,11 @@ export type Asset = z.infer<typeof assetSchema>;
 
 export const assetWithTechnicalMetadataSchema = assetSchema.extend({
   technicalMetadata: mediaTechnicalMetadataSchema.nullable().optional(),
+  filenameMetadata: mediaFilenameMetadataSchema.nullable().optional(),
 });
 export type AssetWithTechnicalMetadata = z.infer<typeof assetWithTechnicalMetadataSchema>;
+export const assetWithMetadataSchema = assetWithTechnicalMetadataSchema;
+export type AssetWithMetadata = AssetWithTechnicalMetadata;
 
 export const createAssetInputSchema = z.object({
   id: z.string().min(1).optional(),
@@ -276,3 +347,24 @@ export const failScanInputSchema = z.object({
   failedCount: z.number().int().nonnegative().optional(),
 });
 export type FailScanInput = z.input<typeof failScanInputSchema>;
+
+export const scanResultSchema = z.object({
+  schemaVersion: z.literal(1).default(1),
+  scanId: z.string().min(1),
+  discovered: z.number().int().nonnegative(),
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+});
+export type ScanResult = z.infer<typeof scanResultSchema>;
+
+// ============================================================================
+// MediaItem Domain Aliases
+// ============================================================================
+
+export const mediaItemSchema = movieSchema;
+export type MediaItem = Movie;
+
+export const mediaItemWithEditionsSchema = movieWithEditionsSchema;
+export type MediaItemWithEditions = MovieWithEditions;
+

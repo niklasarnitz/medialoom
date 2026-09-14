@@ -4,6 +4,7 @@ import {
   type CompleteScanInput,
   type CreateAssetInput,
   type CreateEditionInput,
+  type CreateMediaFilenameMetadataInput,
   type CreateMediaTechnicalMetadataInput,
   type CreateMediaVersionInput,
   type CreateMovieInput,
@@ -11,6 +12,7 @@ import {
   completeScanInputSchema,
   createAssetInputSchema,
   createEditionInputSchema,
+  createMediaFilenameMetadataInputSchema,
   createMediaTechnicalMetadataInputSchema,
   createMediaVersionInputSchema,
   createMovieInputSchema,
@@ -21,12 +23,14 @@ import {
   editionWithVersionsSchema,
   type FailScanInput,
   failScanInputSchema,
+  type MediaFilenameMetadata,
   type MediaTechnicalMetadata,
   type MediaVersion,
   type MediaVersionWithAssets,
   type Movie,
   type MovieStatus,
   type MovieWithEditions,
+  mediaFilenameMetadataSchema,
   mediaTechnicalMetadataSchema,
   mediaVersionSchema,
   mediaVersionWithAssetsSchema,
@@ -36,10 +40,12 @@ import {
   scanSchema,
   type UpdateAssetInput,
   type UpdateEditionInput,
+  type UpdateMediaFilenameMetadataInput,
   type UpdateMediaVersionInput,
   type UpdateMovieInput,
   updateAssetInputSchema,
   updateEditionInputSchema,
+  updateMediaFilenameMetadataInputSchema,
   updateMediaVersionInputSchema,
   updateMovieInputSchema,
 } from '@medialoom/contracts';
@@ -47,6 +53,7 @@ import type {
   Asset as PrismaAsset,
   PrismaClient,
   Edition as PrismaEdition,
+  MediaFilenameMetadata as PrismaMediaFilenameMetadata,
   MediaTechnicalMetadata as PrismaMediaTechnicalMetadata,
   MediaVersion as PrismaMediaVersion,
   Movie as PrismaMovie,
@@ -75,9 +82,35 @@ function mapPrismaTechnicalMetadataToDomain(
   });
 }
 
+function mapPrismaFilenameMetadataToDomain(
+  record: PrismaMediaFilenameMetadata,
+): MediaFilenameMetadata {
+  return mediaFilenameMetadataSchema.parse({
+    id: record.id,
+    assetId: record.assetId,
+    title: record.title,
+    year: record.year,
+    type: record.type,
+    edition: record.edition,
+    screenSize: record.screenSize,
+    source: record.source,
+    videoCodec: record.videoCodec,
+    audioCodec: record.audioCodec,
+    audioChannels: record.audioChannels,
+    releaseGroup: record.releaseGroup,
+    streamingService: record.streamingService,
+    container: record.container,
+    language: record.language,
+    rawJson: record.rawJson,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  });
+}
+
 function mapPrismaAssetToDomain(
   record: PrismaAsset & {
     technicalMetadata?: PrismaMediaTechnicalMetadata | null;
+    filenameMetadata?: PrismaMediaFilenameMetadata | null;
   },
 ): AssetWithTechnicalMetadata {
   return assetWithTechnicalMetadataSchema.parse({
@@ -92,6 +125,9 @@ function mapPrismaAssetToDomain(
     updatedAt: record.updatedAt,
     technicalMetadata: record.technicalMetadata
       ? mapPrismaTechnicalMetadataToDomain(record.technicalMetadata)
+      : null,
+    filenameMetadata: record.filenameMetadata
+      ? mapPrismaFilenameMetadataToDomain(record.filenameMetadata)
       : null,
   });
 }
@@ -191,6 +227,7 @@ const movieIncludeHierarchy = {
           assets: {
             include: {
               technicalMetadata: true,
+              filenameMetadata: true,
             },
           },
         },
@@ -366,6 +403,7 @@ export class InventoryRepository {
             assets: {
               include: {
                 technicalMetadata: true,
+                filenameMetadata: true,
               },
             },
           },
@@ -384,6 +422,7 @@ export class InventoryRepository {
             assets: {
               include: {
                 technicalMetadata: true,
+                filenameMetadata: true,
               },
             },
           },
@@ -426,6 +465,7 @@ export class InventoryRepository {
         assets: {
           include: {
             technicalMetadata: true,
+            filenameMetadata: true,
           },
         },
       },
@@ -440,6 +480,7 @@ export class InventoryRepository {
         assets: {
           include: {
             technicalMetadata: true,
+            filenameMetadata: true,
           },
         },
       },
@@ -468,6 +509,7 @@ export class InventoryRepository {
       },
       include: {
         technicalMetadata: true,
+        filenameMetadata: true,
       },
     });
     return mapPrismaAssetToDomain(record);
@@ -487,6 +529,7 @@ export class InventoryRepository {
       },
       include: {
         technicalMetadata: true,
+        filenameMetadata: true,
       },
     });
     return mapPrismaAssetToDomain(record);
@@ -497,6 +540,7 @@ export class InventoryRepository {
       where: { id },
       include: {
         technicalMetadata: true,
+        filenameMetadata: true,
       },
     });
     return record ? mapPrismaAssetToDomain(record) : null;
@@ -508,6 +552,7 @@ export class InventoryRepository {
       where: { path: canonicalPath },
       include: {
         technicalMetadata: true,
+        filenameMetadata: true,
       },
     });
     return record ? mapPrismaAssetToDomain(record) : null;
@@ -518,8 +563,25 @@ export class InventoryRepository {
       where: { mediaVersionId },
       include: {
         technicalMetadata: true,
+        filenameMetadata: true,
       },
       orderBy: { createdAt: 'asc' },
+    });
+    return records.map(mapPrismaAssetToDomain);
+  }
+
+  async findAssetsByPathPrefix(prefix: string): Promise<AssetWithTechnicalMetadata[]> {
+    const canonicalPrefix = canonicalizeAssetPath(prefix);
+    const records = await this.prisma.asset.findMany({
+      where: {
+        path: {
+          startsWith: canonicalPrefix,
+        },
+      },
+      include: {
+        technicalMetadata: true,
+        filenameMetadata: true,
+      },
     });
     return records.map(mapPrismaAssetToDomain);
   }
@@ -572,6 +634,65 @@ export class InventoryRepository {
     });
     return record ? mapPrismaTechnicalMetadataToDomain(record) : null;
   }
+
+  // ==========================================================================
+  // Filename Metadata Operations (1:1 with Asset)
+  // ==========================================================================
+
+  async setFilenameMetadata(
+    rawInput: CreateMediaFilenameMetadataInput,
+  ): Promise<MediaFilenameMetadata> {
+    const input = createMediaFilenameMetadataInputSchema.parse(rawInput);
+
+    const record = await this.prisma.mediaFilenameMetadata.upsert({
+      where: { assetId: input.assetId },
+      create: {
+        ...(input.id ? { id: input.id } : {}),
+        assetId: input.assetId,
+        title: input.title ?? null,
+        year: input.year ?? null,
+        type: input.type ?? null,
+        edition: input.edition ?? null,
+        screenSize: input.screenSize ?? null,
+        source: input.source ?? null,
+        videoCodec: input.videoCodec ?? null,
+        audioCodec: input.audioCodec ?? null,
+        audioChannels: input.audioChannels ?? null,
+        releaseGroup: input.releaseGroup ?? null,
+        streamingService: input.streamingService ?? null,
+        container: input.container ?? null,
+        language: input.language ?? null,
+        rawJson: input.rawJson ?? null,
+      },
+      update: {
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.year !== undefined ? { year: input.year } : {}),
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.edition !== undefined ? { edition: input.edition } : {}),
+        ...(input.screenSize !== undefined ? { screenSize: input.screenSize } : {}),
+        ...(input.source !== undefined ? { source: input.source } : {}),
+        ...(input.videoCodec !== undefined ? { videoCodec: input.videoCodec } : {}),
+        ...(input.audioCodec !== undefined ? { audioCodec: input.audioCodec } : {}),
+        ...(input.audioChannels !== undefined ? { audioChannels: input.audioChannels } : {}),
+        ...(input.releaseGroup !== undefined ? { releaseGroup: input.releaseGroup } : {}),
+        ...(input.streamingService !== undefined
+          ? { streamingService: input.streamingService }
+          : {}),
+        ...(input.container !== undefined ? { container: input.container } : {}),
+        ...(input.language !== undefined ? { language: input.language } : {}),
+        ...(input.rawJson !== undefined ? { rawJson: input.rawJson } : {}),
+      },
+    });
+    return mapPrismaFilenameMetadataToDomain(record);
+  }
+
+  async getFilenameMetadataByAssetId(assetId: string): Promise<MediaFilenameMetadata | null> {
+    const record = await this.prisma.mediaFilenameMetadata.findUnique({
+      where: { assetId },
+    });
+    return record ? mapPrismaFilenameMetadataToDomain(record) : null;
+  }
 }
 
 export const defaultInventoryRepository = new InventoryRepository();
+

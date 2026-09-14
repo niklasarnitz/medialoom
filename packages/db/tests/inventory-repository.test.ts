@@ -221,6 +221,64 @@ describe('InventoryRepository', () => {
       const direct = await repo.getTechnicalMetadataByAssetId(asset.id);
       expect(direct?.container).toBe('matroska');
     });
+
+    it('attaches and retrieves filename metadata for an Asset and finds by path prefix', async () => {
+      const movie = await repo.createMovie({ title: 'The Matrix', year: 1999 });
+      const edition = await repo.createEdition({ movieId: movie.id, name: 'Theatrical Cut' });
+      const version = await repo.createMediaVersion({
+        editionId: edition.id,
+        name: '1080p BluRay',
+      });
+
+      const assetPath = `/media/library/matrix-${Date.now()}/The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv`;
+      const asset = await repo.createAsset({
+        mediaVersionId: version.id,
+        path: assetPath,
+        sizeBytes: 10_000_000_000,
+        mtime: new Date(),
+        present: true,
+      });
+
+      const fnMeta = await repo.setFilenameMetadata({
+        assetId: asset.id,
+        title: 'The Matrix',
+        year: 1999,
+        type: 'movie',
+        edition: null,
+        screenSize: '1080p',
+        source: 'Blu-ray',
+        videoCodec: 'H.264',
+        audioCodec: 'AC3',
+        audioChannels: '5.1',
+        releaseGroup: 'GROUP',
+        container: 'mkv',
+        rawJson: '{"title":"The Matrix"}',
+      });
+
+      expect(fnMeta.assetId).toBe(asset.id);
+      expect(fnMeta.title).toBe('The Matrix');
+      expect(fnMeta.year).toBe(1999);
+      expect(fnMeta.screenSize).toBe('1080p');
+      expect(fnMeta.source).toBe('Blu-ray');
+      expect(fnMeta.releaseGroup).toBe('GROUP');
+
+      // Verify retrieval through Asset
+      const assetWithFn = await repo.getAsset(asset.id);
+      expect(assetWithFn?.filenameMetadata).not.toBeNull();
+      expect(assetWithFn?.filenameMetadata?.title).toBe('The Matrix');
+      expect(assetWithFn?.filenameMetadata?.releaseGroup).toBe('GROUP');
+
+      // Verify retrieval through Movie hierarchy
+      const movieWithEditions = await repo.getMovie(movie.id);
+      const retrievedAsset = movieWithEditions?.editions[0]?.mediaVersions[0]?.assets[0];
+      expect(retrievedAsset?.filenameMetadata?.screenSize).toBe('1080p');
+
+      // Verify findAssetsByPathPrefix
+      const prefix = assetPath.substring(0, assetPath.lastIndexOf('/'));
+      const foundAssets = await repo.findAssetsByPathPrefix(prefix);
+      expect(foundAssets.length).toBeGreaterThanOrEqual(1);
+      expect(foundAssets.some((a) => a.id === asset.id)).toBe(true);
+    });
   });
 
   describe('Scan state transitions', () => {
