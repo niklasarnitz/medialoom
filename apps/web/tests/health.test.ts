@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'bun:test';
 import { systemHealthSchema } from '@medialoom/contracts';
-import { fetchSystemHealth, getSystemHealthData, Route } from '../src/routes/index';
+import {
+  fetchPageData,
+  fetchSystemHealth,
+  getSystemHealthData,
+  getTmdbSettingsData,
+  Route,
+  saveTmdbApiKey,
+} from '../src/routes/index';
 
 describe('Web Server Health & Loader', () => {
-  it('fetchSystemHealth server function is properly defined', () => {
+  it('fetchSystemHealth and fetchPageData server functions are properly defined', () => {
     expect(typeof fetchSystemHealth).toBe('function');
     expect(fetchSystemHealth.method).toBe('GET');
+    expect(typeof fetchPageData).toBe('function');
+    expect(fetchPageData.method).toBe('GET');
+  });
+
+  it('saveTmdbApiKey server function is properly defined', () => {
+    expect(typeof saveTmdbApiKey).toBe('function');
+    expect(saveTmdbApiKey.method).toBe('POST');
   });
 
   it('getSystemHealthData returns valid system health conforming to schema', async () => {
@@ -18,6 +32,15 @@ describe('Web Server Health & Loader', () => {
     expect(['connected', 'disconnected']).toContain(validated.database);
     expect(typeof validated.uptime).toBe('number');
     expect(typeof validated.timestamp).toBe('string');
+  });
+
+  it('getTmdbSettingsData returns masked TMDb settings data', async () => {
+    const tmdb = await getTmdbSettingsData();
+    expect(tmdb).toBeDefined();
+    expect(typeof tmdb.configured).toBe('boolean');
+    if (tmdb.configured) {
+      expect(typeof tmdb.maskedKey).toBe('string');
+    }
   });
 
   it('route is configured with loader and component', () => {
