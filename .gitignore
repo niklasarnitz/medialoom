@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build and runtime outputs
+dist/
+build/
+.output/
+.vinxi/
+
+# SQLite database and logs
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+dev.db
+medialoom.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,26 @@
+{
+  "name": "medialoom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun --filter @medialoom/web dev",
+    "build": "bun run --filter '*' build",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "cli": "bun run apps/cli/bin/medialoom.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^22.13.9",
+    "prisma": "^6.4.1",
+    "typescript": "^5.8.2"
+  }
+}

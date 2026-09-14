@@ -1,0 +1,15 @@
+{
+  "name": "@medialoom/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@medialoom/contracts": "workspace:*",
+    "@medialoom/config": "workspace:*",
+    "@medialoom/db": "workspace:*"
+  }
+}

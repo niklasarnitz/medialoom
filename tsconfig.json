@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "jsx": "react-jsx",
+    "types": ["bun"],
+    "baseUrl": ".",
+    "paths": {
+      "@medialoom/contracts": ["./packages/contracts/src/index.ts"],
+      "@medialoom/config": ["./packages/config/src/index.ts"],
+      "@medialoom/db": ["./packages/db/src/index.ts"],
+      "@medialoom/core": ["./packages/core/src/index.ts"],
+      "@medialoom/media": ["./packages/media/src/index.ts"],
+      "@medialoom/profiles": ["./packages/profiles/src/index.ts"],
+      "@medialoom/providers": ["./packages/providers/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*",
+    "packages/*/tests/**/*",
+    "apps/*/src/**/*",
+    "apps/*/bin/**/*",
+    "apps/*/tests/**/*"
+  ],
+  "exclude": ["node_modules", "dist", "build", ".output"]
+}
