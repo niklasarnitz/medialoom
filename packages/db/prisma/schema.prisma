@@ -14,3 +14,66 @@ model SystemMetadata {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model Movie {
+  id             String      @id @default(cuid())
+  title          String
+  originalTitle  String?
+  year           Int?
+  runtimeMinutes Int?
+  overview       String?
+  tmdbId         Int?        @unique
+  imdbId         String?     @unique
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  mediaItems     MediaItem[]
+}
+
+model MediaItem {
+  id              String   @id @default(cuid())
+  movieId         String?
+  status          String   @default("UNMATCHED")
+  matchConfidence Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  movie           Movie?   @relation(fields: [movieId], references: [id], onDelete: SetNull)
+  assets          Asset[]
+
+  @@index([movieId])
+  @@index([status])
+}
+
+model Asset {
+  id          String    @id @default(cuid())
+  mediaItemId String
+  type        String    @default("VIDEO")
+  path        String    @unique
+  sizeBytes   BigInt
+  mtime       DateTime
+  present     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@index([mediaItemId])
+}
+
+model Scan {
+  id              String    @id @default(cuid())
+  rootPath        String
+  status          String    @default("RUNNING")
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  discoveredCount Int       @default(0)
+  createdCount    Int       @default(0)
+  updatedCount    Int       @default(0)
+  failedCount     Int       @default(0)
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+}

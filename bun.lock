@@ -70,6 +70,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@medialoom/config": "workspace:*",
+        "@medialoom/contracts": "workspace:*",
         "@prisma/client": "^6.4.1",
       },
       "devDependencies": {
