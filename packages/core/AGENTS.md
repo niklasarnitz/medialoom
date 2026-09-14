@@ -7,19 +7,21 @@ Keep it independent from:
 * React
 * TanStack route components
 * CLI presentation
-* Prisma-generated types
 * TMDb response types
 * `guessit-js` result types
+
+The database schema is the master type structure for domain entities; core builds directly upon it.
 
 Adapters call core. Core must not depend on adapters.
 
 Important domain distinctions:
 
 ```text
-Movie / Work
-MediaItem
+Movie
+Edition
+MediaVersion
 Asset
-Metadata
+MediaTechnicalMetadata
 OperationPlan
 ```
 

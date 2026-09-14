@@ -10,6 +10,7 @@
   "dependencies": {
     "@medialoom/contracts": "workspace:*",
     "@medialoom/config": "workspace:*",
-    "@medialoom/db": "workspace:*"
+    "@medialoom/db": "workspace:*",
+    "@medialoom/media": "workspace:*"
   }
 }
