@@ -79,8 +79,8 @@ model Asset {
 }
 
 model MediaTechnicalMetadata {
-  id              String   @id @default(cuid())
-  assetId         String   @unique
+  id              String        @id @default(cuid())
+  assetId         String        @unique
   container       String?
   formatName      String?
   durationSeconds Float?
@@ -88,12 +88,49 @@ model MediaTechnicalMetadata {
   width           Int?
   height          Int?
   videoCodec      String?
+  frameRate       Float?
+  bitDepth        Int?
+  hdrFormat       String?
   audioCodec      String?
   audioChannels   Int?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  audioLanguage   String?
+  audioLayout     String?
+  rawJson         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  asset           Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  asset           Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  streams         MediaStream[]
+}
+
+model MediaStream {
+  id                  String                 @id @default(cuid())
+  technicalMetadataId String
+  index               Int
+  streamType          String
+  codec               String?
+  codecLongName       String?
+  profile             String?
+  width               Int?
+  height              Int?
+  frameRate           Float?
+  bitDepth            Int?
+  hdrFormat           String?
+  channels            Int?
+  channelLayout       String?
+  sampleRate          Int?
+  bitRate             BigInt?
+  language            String?
+  title               String?
+  isDefault           Boolean                @default(false)
+  isForced            Boolean                @default(false)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  technicalMetadata   MediaTechnicalMetadata @relation(fields: [technicalMetadataId], references: [id], onDelete: Cascade)
+
+  @@index([technicalMetadataId])
+  @@index([streamType])
 }
 
 model MediaFilenameMetadata {

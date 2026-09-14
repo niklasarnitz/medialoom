@@ -18,18 +18,85 @@ export type KnownAssetType = z.infer<typeof knownAssetTypeSchema>;
 export const assetTypeSchema = z.string().min(1);
 export type AssetType = z.infer<typeof assetTypeSchema>;
 
+export const streamTypeSchema = z.enum([
+  'VIDEO',
+  'AUDIO',
+  'SUBTITLE',
+  'DATA',
+  'ATTACHMENT',
+  'OTHER',
+]);
+export type StreamType = z.infer<typeof streamTypeSchema>;
+
+export const mediaStreamSchema = z.object({
+  id: z.string().min(1),
+  technicalMetadataId: z.string().min(1),
+  index: z.number().int().nonnegative(),
+  streamType: z.string().min(1),
+  codec: z.string().nullable().optional(),
+  codecLongName: z.string().nullable().optional(),
+  profile: z.string().nullable().optional(),
+  width: z.number().int().positive().nullable().optional(),
+  height: z.number().int().positive().nullable().optional(),
+  frameRate: z.number().positive().nullable().optional(),
+  bitDepth: z.number().int().positive().nullable().optional(),
+  hdrFormat: z.string().nullable().optional(),
+  channels: z.number().int().positive().nullable().optional(),
+  channelLayout: z.string().nullable().optional(),
+  sampleRate: z.number().int().positive().nullable().optional(),
+  bitRate: z.union([z.number(), z.bigint()]).nullable().optional(),
+  language: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  isDefault: z.boolean().default(false),
+  isForced: z.boolean().default(false),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type MediaStream = z.infer<typeof mediaStreamSchema>;
+
+export const createMediaStreamInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  technicalMetadataId: z.string().min(1).optional(),
+  index: z.number().int().nonnegative(),
+  streamType: z.string().min(1),
+  codec: z.string().nullable().optional(),
+  codecLongName: z.string().nullable().optional(),
+  profile: z.string().nullable().optional(),
+  width: z.number().int().positive().nullable().optional(),
+  height: z.number().int().positive().nullable().optional(),
+  frameRate: z.number().positive().nullable().optional(),
+  bitDepth: z.number().int().positive().nullable().optional(),
+  hdrFormat: z.string().nullable().optional(),
+  channels: z.number().int().positive().nullable().optional(),
+  channelLayout: z.string().nullable().optional(),
+  sampleRate: z.number().int().positive().nullable().optional(),
+  bitRate: z.union([z.number(), z.bigint()]).nullable().optional(),
+  language: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  isDefault: z.boolean().default(false).optional(),
+  isForced: z.boolean().default(false).optional(),
+});
+export type CreateMediaStreamInput = z.input<typeof createMediaStreamInputSchema>;
+
 export const mediaTechnicalMetadataSchema = z.object({
   id: z.string().min(1),
   assetId: z.string().min(1),
   container: z.string().nullable().optional(),
   formatName: z.string().nullable().optional(),
   durationSeconds: z.number().nonnegative().nullable().optional(),
-  bitRate: z.number().int().nonnegative().nullable().optional(),
+  bitRate: z.union([z.number(), z.bigint()]).nullable().optional(),
   width: z.number().int().positive().nullable().optional(),
   height: z.number().int().positive().nullable().optional(),
   videoCodec: z.string().nullable().optional(),
+  frameRate: z.number().positive().nullable().optional(),
+  bitDepth: z.number().int().positive().nullable().optional(),
+  hdrFormat: z.string().nullable().optional(),
   audioCodec: z.string().nullable().optional(),
   audioChannels: z.number().int().positive().nullable().optional(),
+  audioLanguage: z.string().nullable().optional(),
+  audioLayout: z.string().nullable().optional(),
+  rawJson: z.string().nullable().optional(),
+  streams: z.array(mediaStreamSchema).optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -41,12 +108,19 @@ export const createMediaTechnicalMetadataInputSchema = z.object({
   container: z.string().nullable().optional(),
   formatName: z.string().nullable().optional(),
   durationSeconds: z.number().nonnegative().nullable().optional(),
-  bitRate: z.number().int().nonnegative().nullable().optional(),
+  bitRate: z.union([z.number(), z.bigint()]).nullable().optional(),
   width: z.number().int().positive().nullable().optional(),
   height: z.number().int().positive().nullable().optional(),
   videoCodec: z.string().nullable().optional(),
+  frameRate: z.number().positive().nullable().optional(),
+  bitDepth: z.number().int().positive().nullable().optional(),
+  hdrFormat: z.string().nullable().optional(),
   audioCodec: z.string().nullable().optional(),
   audioChannels: z.number().int().positive().nullable().optional(),
+  audioLanguage: z.string().nullable().optional(),
+  audioLayout: z.string().nullable().optional(),
+  rawJson: z.string().nullable().optional(),
+  streams: z.array(createMediaStreamInputSchema).optional(),
 });
 export type CreateMediaTechnicalMetadataInput = z.input<
   typeof createMediaTechnicalMetadataInputSchema
@@ -56,12 +130,19 @@ export const updateMediaTechnicalMetadataInputSchema = z.object({
   container: z.string().nullable().optional(),
   formatName: z.string().nullable().optional(),
   durationSeconds: z.number().nonnegative().nullable().optional(),
-  bitRate: z.number().int().nonnegative().nullable().optional(),
+  bitRate: z.union([z.number(), z.bigint()]).nullable().optional(),
   width: z.number().int().positive().nullable().optional(),
   height: z.number().int().positive().nullable().optional(),
   videoCodec: z.string().nullable().optional(),
+  frameRate: z.number().positive().nullable().optional(),
+  bitDepth: z.number().int().positive().nullable().optional(),
+  hdrFormat: z.string().nullable().optional(),
   audioCodec: z.string().nullable().optional(),
   audioChannels: z.number().int().positive().nullable().optional(),
+  audioLanguage: z.string().nullable().optional(),
+  audioLayout: z.string().nullable().optional(),
+  rawJson: z.string().nullable().optional(),
+  streams: z.array(createMediaStreamInputSchema).optional(),
 });
 export type UpdateMediaTechnicalMetadataInput = z.input<
   typeof updateMediaTechnicalMetadataInputSchema

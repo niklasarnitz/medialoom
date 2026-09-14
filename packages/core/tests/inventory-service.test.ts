@@ -11,8 +11,34 @@ describe('InventoryService', () => {
   let testDir: string;
 
   beforeAll(() => {
+    const mockInspector = {
+      async inspect() {
+        return {
+          container: 'matroska',
+          formatName: 'matroska',
+          durationSeconds: 120,
+          bitRate: 5000000,
+          sizeBytes: 1000000,
+          width: 1920,
+          height: 1080,
+          videoCodec: 'h264',
+          frameRate: 24,
+          bitDepth: 8,
+          hdrFormat: null,
+          audioCodec: 'aac',
+          audioChannels: 2,
+          audioLanguage: 'English',
+          audioLayout: 'stereo',
+          videoStreams: [],
+          audioStreams: [],
+          subtitleStreams: [],
+          allStreams: [],
+          rawJson: '{}',
+        };
+      },
+    };
     repo = new InventoryRepository(getPrismaClient());
-    service = new InventoryService(repo);
+    service = new InventoryService(repo, mockInspector);
   });
 
   afterAll(async () => {

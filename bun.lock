@@ -23,6 +23,9 @@
         "@medialoom/contracts": "workspace:*",
         "@medialoom/core": "workspace:*",
       },
+      "devDependencies": {
+        "@medialoom/media": "workspace:*",
+      },
     },
     "apps/web": {
       "name": "@medialoom/web",
@@ -63,6 +66,7 @@
         "@medialoom/config": "workspace:*",
         "@medialoom/contracts": "workspace:*",
         "@medialoom/db": "workspace:*",
+        "@medialoom/media": "workspace:*",
       },
     },
     "packages/db": {
@@ -81,7 +85,9 @@
       "name": "@medialoom/media",
       "version": "0.1.0",
       "dependencies": {
+        "@medialoom/contracts": "workspace:*",
         "guessit-js": "^4.7.1",
+        "zod": "^3.24.2",
       },
     },
     "packages/profiles": {

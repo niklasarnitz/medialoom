@@ -14,5 +14,8 @@
     "@medialoom/contracts": "workspace:*",
     "@medialoom/config": "workspace:*",
     "@medialoom/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@medialoom/media": "workspace:*"
   }
 }

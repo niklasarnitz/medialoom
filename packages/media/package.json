@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@medialoom/contracts": "workspace:*",
-    "guessit-js": "^4.7.1"
+    "guessit-js": "^4.7.1",
+    "zod": "^3.24.2"
   }
 }

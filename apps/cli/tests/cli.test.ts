@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { doctorReportEnvelopeSchema, scanResultSchema } from '@medialoom/contracts';
+import { TINY_VIDEO_BUFFER } from '@medialoom/media';
 import { runCli } from '../src';
 
 describe('medialoom CLI', () => {
@@ -125,7 +126,7 @@ describe('medialoom CLI', () => {
     const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'medialoom-cli-test-'));
     try {
       const fixtureName = 'The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv';
-      await fs.writeFile(path.join(tempDir, fixtureName), 'sample content');
+      await fs.writeFile(path.join(tempDir, fixtureName), TINY_VIDEO_BUFFER);
 
       // 1. scan command in human mode
       let scanHumanOut = '';
@@ -196,6 +197,28 @@ describe('medialoom CLI', () => {
       expect(asset.filenameMetadata.source).toBe('Blu-ray');
       expect(asset.filenameMetadata.releaseGroup).toBe('GROUP');
 
+      // 4b. Acceptance requirement: inspect ITEM_ID --json exposes clearly separated metadata
+      expect(asset.filenameMetadata).toBeDefined();
+      expect(asset.technicalMetadata).toBeDefined();
+      expect(asset.technicalMetadata.width).toBe(16);
+      expect(asset.technicalMetadata.height).toBe(16);
+      expect(asset.technicalMetadata.videoCodec).toBe('h264');
+      expect(Array.isArray(asset.technicalMetadata.streams)).toBe(true);
+
+      // Also verify inspect in human mode prints technical metadata
+      let inspectHumanOut = '';
+      let inspectHumanErr = '';
+      const inspectHumanCode = await runCli(['inspect', matrix.id], {
+        stdout: { write: (c) => (inspectHumanOut += c) },
+        stderr: { write: (c) => (inspectHumanErr += c) },
+      });
+      expect(inspectHumanCode).toBe(0);
+      expect(inspectHumanErr).toBe('');
+      expect(inspectHumanOut).toContain('Filename Metadata:');
+      expect(inspectHumanOut).toContain('Technical Metadata:');
+      expect(inspectHumanOut).toContain('16x16');
+      expect(inspectHumanOut).toContain('h264');
+
       // 5. inspect non-existent item
       let missingOut = '';
       let missingErr = '';
@@ -213,7 +236,10 @@ describe('medialoom CLI', () => {
   it('executes scan --json as a standalone binary emitting pure JSON', async () => {
     const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'medialoom-cli-bin-test-'));
     try {
-      await fs.writeFile(path.join(tempDir, 'Blade.Runner.2049.2017.2160p.UHD.BluRay.mkv'), 'test');
+      await fs.writeFile(
+        path.join(tempDir, 'Blade.Runner.2049.2017.2160p.UHD.BluRay.mkv'),
+        TINY_VIDEO_BUFFER,
+      );
 
       const result = spawnSync('bun', ['apps/cli/bin/medialoom.ts', 'scan', tempDir, '--json'], {
         cwd: process.cwd(),

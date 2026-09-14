@@ -32,7 +32,6 @@ import {
 import type {
   Edition,
   MediaFilenameMetadata,
-  MediaTechnicalMetadata,
   MediaVersion,
   Movie,
   Prisma,
@@ -42,8 +41,16 @@ import type {
 import { getPrismaClient } from '../client';
 import { canonicalizeAssetPath } from '../utils/path';
 
+export const technicalMetadataIncludeRelations = {
+  streams: {
+    orderBy: { index: 'asc' },
+  },
+} as const;
+
 export const assetIncludeRelations = {
-  technicalMetadata: true,
+  technicalMetadata: {
+    include: technicalMetadataIncludeRelations,
+  },
   filenameMetadata: true,
 } as const;
 
@@ -75,6 +82,10 @@ export type EditionWithHierarchy = Prisma.EditionGetPayload<{
 
 export type MediaVersionWithHierarchy = Prisma.MediaVersionGetPayload<{
   include: typeof mediaVersionIncludeHierarchy;
+}>;
+
+export type MediaTechnicalMetadataWithStreams = Prisma.MediaTechnicalMetadataGetPayload<{
+  include: typeof technicalMetadataIncludeRelations;
 }>;
 
 export type AssetWithRelations = Prisma.AssetGetPayload<{
@@ -368,44 +379,101 @@ export class InventoryRepository {
 
   async setTechnicalMetadata(
     rawInput: CreateMediaTechnicalMetadataInput,
-  ): Promise<MediaTechnicalMetadata> {
+  ): Promise<MediaTechnicalMetadataWithStreams> {
     const input = createMediaTechnicalMetadataInputSchema.parse(rawInput);
 
-    return this.prisma.mediaTechnicalMetadata.upsert({
-      where: { assetId: input.assetId },
-      create: {
-        ...(input.id ? { id: input.id } : {}),
-        assetId: input.assetId,
-        container: input.container ?? null,
-        formatName: input.formatName ?? null,
-        durationSeconds: input.durationSeconds ?? null,
-        bitRate:
-          input.bitRate !== undefined && input.bitRate !== null ? BigInt(input.bitRate) : null,
-        width: input.width ?? null,
-        height: input.height ?? null,
-        videoCodec: input.videoCodec ?? null,
-        audioCodec: input.audioCodec ?? null,
-        audioChannels: input.audioChannels ?? null,
-      },
-      update: {
-        ...(input.container !== undefined ? { container: input.container } : {}),
-        ...(input.formatName !== undefined ? { formatName: input.formatName } : {}),
-        ...(input.durationSeconds !== undefined ? { durationSeconds: input.durationSeconds } : {}),
-        ...(input.bitRate !== undefined
-          ? { bitRate: input.bitRate !== null ? BigInt(input.bitRate) : null }
-          : {}),
-        ...(input.width !== undefined ? { width: input.width } : {}),
-        ...(input.height !== undefined ? { height: input.height } : {}),
-        ...(input.videoCodec !== undefined ? { videoCodec: input.videoCodec } : {}),
-        ...(input.audioCodec !== undefined ? { audioCodec: input.audioCodec } : {}),
-        ...(input.audioChannels !== undefined ? { audioChannels: input.audioChannels } : {}),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const technicalMetadata = await tx.mediaTechnicalMetadata.upsert({
+        where: { assetId: input.assetId },
+        create: {
+          ...(input.id ? { id: input.id } : {}),
+          assetId: input.assetId,
+          container: input.container ?? null,
+          formatName: input.formatName ?? null,
+          durationSeconds: input.durationSeconds ?? null,
+          bitRate:
+            input.bitRate !== undefined && input.bitRate !== null ? BigInt(input.bitRate) : null,
+          width: input.width ?? null,
+          height: input.height ?? null,
+          videoCodec: input.videoCodec ?? null,
+          frameRate: input.frameRate ?? null,
+          bitDepth: input.bitDepth ?? null,
+          hdrFormat: input.hdrFormat ?? null,
+          audioCodec: input.audioCodec ?? null,
+          audioChannels: input.audioChannels ?? null,
+          audioLanguage: input.audioLanguage ?? null,
+          audioLayout: input.audioLayout ?? null,
+          rawJson: input.rawJson ?? null,
+        },
+        update: {
+          ...(input.container !== undefined ? { container: input.container } : {}),
+          ...(input.formatName !== undefined ? { formatName: input.formatName } : {}),
+          ...(input.durationSeconds !== undefined
+            ? { durationSeconds: input.durationSeconds }
+            : {}),
+          ...(input.bitRate !== undefined
+            ? { bitRate: input.bitRate !== null ? BigInt(input.bitRate) : null }
+            : {}),
+          ...(input.width !== undefined ? { width: input.width } : {}),
+          ...(input.height !== undefined ? { height: input.height } : {}),
+          ...(input.videoCodec !== undefined ? { videoCodec: input.videoCodec } : {}),
+          ...(input.frameRate !== undefined ? { frameRate: input.frameRate } : {}),
+          ...(input.bitDepth !== undefined ? { bitDepth: input.bitDepth } : {}),
+          ...(input.hdrFormat !== undefined ? { hdrFormat: input.hdrFormat } : {}),
+          ...(input.audioCodec !== undefined ? { audioCodec: input.audioCodec } : {}),
+          ...(input.audioChannels !== undefined ? { audioChannels: input.audioChannels } : {}),
+          ...(input.audioLanguage !== undefined ? { audioLanguage: input.audioLanguage } : {}),
+          ...(input.audioLayout !== undefined ? { audioLayout: input.audioLayout } : {}),
+          ...(input.rawJson !== undefined ? { rawJson: input.rawJson } : {}),
+        },
+      });
+
+      if (input.streams !== undefined) {
+        await tx.mediaStream.deleteMany({
+          where: { technicalMetadataId: technicalMetadata.id },
+        });
+
+        if (input.streams.length > 0) {
+          await tx.mediaStream.createMany({
+            data: input.streams.map((s) => ({
+              ...(s.id ? { id: s.id } : {}),
+              technicalMetadataId: technicalMetadata.id,
+              index: s.index,
+              streamType: s.streamType,
+              codec: s.codec ?? null,
+              codecLongName: s.codecLongName ?? null,
+              profile: s.profile ?? null,
+              width: s.width ?? null,
+              height: s.height ?? null,
+              frameRate: s.frameRate ?? null,
+              bitDepth: s.bitDepth ?? null,
+              hdrFormat: s.hdrFormat ?? null,
+              channels: s.channels ?? null,
+              channelLayout: s.channelLayout ?? null,
+              sampleRate: s.sampleRate ?? null,
+              bitRate: s.bitRate !== undefined && s.bitRate !== null ? BigInt(s.bitRate) : null,
+              language: s.language ?? null,
+              title: s.title ?? null,
+              isDefault: s.isDefault ?? false,
+              isForced: s.isForced ?? false,
+            })),
+          });
+        }
+      }
+
+      return tx.mediaTechnicalMetadata.findUniqueOrThrow({
+        where: { id: technicalMetadata.id },
+        include: technicalMetadataIncludeRelations,
+      });
     });
   }
 
-  async getTechnicalMetadataByAssetId(assetId: string): Promise<MediaTechnicalMetadata | null> {
+  async getTechnicalMetadataByAssetId(
+    assetId: string,
+  ): Promise<MediaTechnicalMetadataWithStreams | null> {
     return this.prisma.mediaTechnicalMetadata.findUnique({
       where: { assetId },
+      include: technicalMetadataIncludeRelations,
     });
   }
 

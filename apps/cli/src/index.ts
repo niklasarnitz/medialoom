@@ -251,6 +251,41 @@ export async function runCli(
                 if (fn.audioChannels) lines.push(`            Channels:      ${fn.audioChannels}`);
                 if (fn.releaseGroup) lines.push(`            Release Group: ${fn.releaseGroup}`);
               }
+              if (asset.technicalMetadata) {
+                const tech = asset.technicalMetadata;
+                lines.push('          Technical Metadata:');
+                if (tech.container) lines.push(`            Container:     ${tech.container}`);
+                if (tech.durationSeconds)
+                  lines.push(`            Duration:      ${Math.round(tech.durationSeconds)}s`);
+                if (tech.width && tech.height)
+                  lines.push(`            Resolution:    ${tech.width}x${tech.height}`);
+                if (tech.videoCodec) lines.push(`            Video Codec:   ${tech.videoCodec}`);
+                if (tech.frameRate) lines.push(`            Frame Rate:    ${tech.frameRate} fps`);
+                if (tech.bitDepth) lines.push(`            Bit Depth:     ${tech.bitDepth}-bit`);
+                if (tech.hdrFormat) lines.push(`            HDR:           ${tech.hdrFormat}`);
+                if (tech.audioCodec) lines.push(`            Audio Codec:   ${tech.audioCodec}`);
+                if (tech.audioChannels)
+                  lines.push(`            Channels:      ${tech.audioChannels}`);
+                if (tech.audioLanguage)
+                  lines.push(`            Audio Lang:    ${tech.audioLanguage}`);
+                if (tech.streams && tech.streams.length > 0) {
+                  lines.push(`            Streams (${tech.streams.length}):`);
+                  for (const s of tech.streams) {
+                    const details = [
+                      s.codec,
+                      s.width && s.height ? `${s.width}x${s.height}` : null,
+                      s.channels ? `${s.channels}ch` : null,
+                      s.channelLayout,
+                      s.language,
+                      s.isDefault ? 'default' : null,
+                      s.isForced ? 'forced' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(', ');
+                    lines.push(`              #${s.index} [${s.streamType}]: ${details}`);
+                  }
+                }
+              }
             }
           }
         }

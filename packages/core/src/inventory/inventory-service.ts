@@ -7,19 +7,29 @@ import {
   type ListMoviesOptions,
   type MovieWithHierarchy,
 } from '@medialoom/db';
-import { discoverMediaFiles } from '@medialoom/media';
+import {
+  defaultFfprobeAdapter,
+  discoverMediaFiles,
+  type NormalizedTechnicalMetadata,
+} from '@medialoom/media';
+
+export interface MediaInspector {
+  inspect(filePath: string): Promise<NormalizedTechnicalMetadata>;
+}
 
 export class InventoryService {
   private repo: InventoryRepository;
+  private inspector: MediaInspector | null;
 
-  constructor(repo?: InventoryRepository) {
+  constructor(repo?: InventoryRepository, inspector?: MediaInspector | null) {
     this.repo = repo ?? defaultInventoryRepository;
+    this.inspector = inspector === undefined ? defaultFfprobeAdapter : inspector;
   }
 
   /**
    * Performs read-only discovery of media files under rootPath,
    * parses filename metadata, idempotently reconciles items/assets in the database,
-   * and tracks file presence state.
+   * inspects technical properties via ffprobe, and tracks file presence state.
    */
   async scan(rootPath: string): Promise<ScanResult> {
     const resolvedPath = path.resolve(rootPath);
@@ -51,12 +61,16 @@ export class InventoryService {
 
         try {
           const existingAsset = await this.repo.getAssetByPath(file.path);
+          let assetId: string;
+          let shouldInspectTechnical = false;
 
           if (existingAsset) {
+            assetId = existingAsset.id;
             // Pragmatic file identity based on canonical path, size, and mtime
             const sizeMatches = Number(existingAsset.sizeBytes) === Number(file.sizeBytes);
             const mtimeMatches = existingAsset.mtime.getTime() === file.mtime.getTime();
             const wasPresent = existingAsset.present;
+            const hasTechnicalMetadata = existingAsset.technicalMetadata !== null;
 
             if (!sizeMatches || !mtimeMatches || !wasPresent) {
               await this.repo.updateAsset(existingAsset.id, {
@@ -71,8 +85,14 @@ export class InventoryService {
               });
 
               updatedCount++;
+              shouldInspectTechnical = true;
+            } else if (!hasTechnicalMetadata) {
+              // File is unchanged on disk, but missing technical inspection metadata
+              shouldInspectTechnical = true;
+            } else {
+              // Performance optimization: file is unchanged and already inspected.
+              shouldInspectTechnical = false;
             }
-            // If matches and was present: unchanged (idempotent no-op)
           } else {
             // Unmatched Movie creation
             const fallbackTitle = path.basename(file.path, file.extension);
@@ -114,7 +134,57 @@ export class InventoryService {
               ...file.parsed,
             });
 
+            assetId = asset.id;
             createdCount++;
+            shouldInspectTechnical = true;
+          }
+
+          if (shouldInspectTechnical && this.inspector) {
+            try {
+              const technical = await this.inspector.inspect(file.path);
+              await this.repo.setTechnicalMetadata({
+                assetId,
+                container: technical.container,
+                formatName: technical.formatName,
+                durationSeconds: technical.durationSeconds,
+                bitRate: technical.bitRate,
+                width: technical.width,
+                height: technical.height,
+                videoCodec: technical.videoCodec,
+                frameRate: technical.frameRate,
+                bitDepth: technical.bitDepth,
+                hdrFormat: technical.hdrFormat,
+                audioCodec: technical.audioCodec,
+                audioChannels: technical.audioChannels,
+                audioLanguage: technical.audioLanguage,
+                audioLayout: technical.audioLayout,
+                rawJson: technical.rawJson,
+                streams: technical.allStreams.map((s) => ({
+                  index: s.index,
+                  streamType: s.streamType,
+                  codec: s.codec,
+                  codecLongName: s.codecLongName,
+                  profile: s.profile,
+                  width: s.width,
+                  height: s.height,
+                  frameRate: s.frameRate,
+                  bitDepth: s.bitDepth,
+                  hdrFormat: s.hdrFormat,
+                  channels: s.channels,
+                  channelLayout: s.channelLayout,
+                  sampleRate: s.sampleRate,
+                  bitRate: s.bitRate,
+                  language: s.language,
+                  title: s.title,
+                  isDefault: s.isDefault ?? false,
+                  isForced: s.isForced ?? false,
+                })),
+              });
+            } catch {
+              // One failed technical inspection must not abort the whole scan.
+              // We track the asset but mark it as failed in scan metrics.
+              failedCount++;
+            }
           }
         } catch {
           failedCount++;

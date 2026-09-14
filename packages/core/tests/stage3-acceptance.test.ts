@@ -12,7 +12,7 @@ describe('Stage 3 Acceptance Test', () => {
 
   beforeAll(() => {
     repo = new InventoryRepository(getPrismaClient());
-    service = new InventoryService(repo);
+    service = new InventoryService(repo, null);
   });
 
   afterAll(async () => {
