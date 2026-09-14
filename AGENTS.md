@@ -36,6 +36,14 @@ More specific `AGENTS.md` files override general guidance for their area.
 * Provider-specific and third-party types must not leak into the domain.
 * Do not implement unrelated future stages.
 
+## Local Media Volumes
+
+Personal media collections may be mounted at:
+* `/Volumes/Movies` (movies)
+* `/Volumes/Series` (series)
+
+**STRICT SAFETY RULE:** NEVER edit, write to, move, rename, or delete anything in `/Volumes/Movies` or `/Volumes/Series`. Treat these paths as strictly read-only.
+
 ## Before completion
 
 Run the repository equivalents of:
