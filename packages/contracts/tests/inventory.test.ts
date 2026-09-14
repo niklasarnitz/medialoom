@@ -3,22 +3,24 @@ import {
   AssetType,
   assetSchema,
   createAssetInputSchema,
-  createMediaItemInputSchema,
+  createEditionInputSchema,
+  createMediaVersionInputSchema,
   createMovieInputSchema,
   createScanInputSchema,
-  mediaItemSchema,
-  mediaItemWithAssetsSchema,
-  movieSchema,
+  editionSchema,
+  mediaTechnicalMetadataSchema,
+  mediaVersionSchema,
+  movieWithEditionsSchema,
   scanSchema,
 } from '../src';
 
 describe('Inventory Domain Contracts', () => {
-  describe('Asset', () => {
+  describe('Asset & Technical Metadata', () => {
     it('validates a correct Asset object', () => {
       const now = new Date();
       const raw = {
         id: 'asset_1',
-        mediaItemId: 'item_1',
+        mediaVersionId: 'version_1',
         type: AssetType.VIDEO,
         path: '/media/movies/Inception (2010)/Inception.mkv',
         sizeBytes: 15_000_000_000,
@@ -30,15 +32,39 @@ describe('Inventory Domain Contracts', () => {
 
       const parsed = assetSchema.parse(raw);
       expect(parsed.id).toBe('asset_1');
+      expect(parsed.mediaVersionId).toBe('version_1');
       expect(parsed.sizeBytes).toBe(15_000_000_000);
       expect(parsed.mtime).toEqual(now);
       expect(parsed.type).toBe('VIDEO');
     });
 
+    it('validates 1:1 MediaTechnicalMetadata', () => {
+      const raw = {
+        id: 'tech_1',
+        assetId: 'asset_1',
+        container: 'matroska',
+        formatName: 'matroska,webm',
+        durationSeconds: 8880.5,
+        bitRate: 25_000_000,
+        width: 3840,
+        height: 2160,
+        videoCodec: 'hevc',
+        audioCodec: 'truehd',
+        audioChannels: 8,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const parsed = mediaTechnicalMetadataSchema.parse(raw);
+      expect(parsed.assetId).toBe('asset_1');
+      expect(parsed.videoCodec).toBe('hevc');
+      expect(parsed.audioChannels).toBe(8);
+    });
+
     it('allows extensible custom asset types', () => {
       const raw = {
         id: 'asset_sub',
-        mediaItemId: 'item_1',
+        mediaVersionId: 'version_1',
         type: 'SUBTITLE',
         path: '/media/movies/Inception (2010)/Inception.en.srt',
         sizeBytes: 45_000,
@@ -52,10 +78,10 @@ describe('Inventory Domain Contracts', () => {
       expect(parsed.type).toBe('SUBTITLE');
     });
 
-    it('rejects invalid sizeBytes (negative or non-integer)', () => {
+    it('rejects invalid sizeBytes', () => {
       expect(() =>
         createAssetInputSchema.parse({
-          mediaItemId: 'item_1',
+          mediaVersionId: 'version_1',
           path: '/path/to/file.mp4',
           sizeBytes: -10,
           mtime: new Date(),
@@ -64,88 +90,110 @@ describe('Inventory Domain Contracts', () => {
     });
   });
 
-  describe('Movie', () => {
-    it('validates a full canonical Movie object', () => {
-      const movie = {
-        id: 'movie_1',
-        title: 'Inception',
-        originalTitle: 'Inception',
-        year: 2010,
-        runtimeMinutes: 148,
-        overview: 'A thief who steals corporate secrets through dream-sharing...',
-        tmdbId: 27205,
-        imdbId: 'tt1375666',
+  describe('Edition & MediaVersion', () => {
+    it('validates Edition with optional name', () => {
+      const edition = editionSchema.parse({
+        id: 'ed_1',
+        movieId: 'movie_1',
+        name: 'Director’s Cut',
         createdAt: new Date(),
         updatedAt: new Date(),
-      };
+      });
+      expect(edition.name).toBe('Director’s Cut');
 
-      const parsed = movieSchema.parse(movie);
-      expect(parsed.title).toBe('Inception');
-      expect(parsed.tmdbId).toBe(27205);
+      const defaultEdition = createEditionInputSchema.parse({
+        movieId: 'movie_1',
+      });
+      expect(defaultEdition.name).toBeUndefined();
     });
 
-    it('validates Movie with nullable optional metadata', () => {
-      const input = {
-        title: 'Unknown Movie',
-      };
-      const parsed = createMovieInputSchema.parse(input);
-      expect(parsed.title).toBe('Unknown Movie');
-      expect(parsed.year).toBeUndefined();
+    it('validates MediaVersion with optional quality name', () => {
+      const version = mediaVersionSchema.parse({
+        id: 'mv_1',
+        editionId: 'ed_1',
+        name: '2160p UHD BluRay',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      expect(version.name).toBe('2160p UHD BluRay');
+
+      const defaultVersion = createMediaVersionInputSchema.parse({
+        editionId: 'ed_1',
+      });
+      expect(defaultVersion.name).toBeUndefined();
     });
   });
 
-  describe('MediaItem', () => {
-    it('validates an unmatched MediaItem without movieId', () => {
-      const parsed = createMediaItemInputSchema.parse({});
+  describe('Movie with Hierarchy', () => {
+    it('validates an unmatched Movie with default status and no TMDb ID', () => {
+      const input = {
+        title: 'Unmatched Movie',
+      };
+      const parsed = createMovieInputSchema.parse(input);
+      expect(parsed.title).toBe('Unmatched Movie');
       expect(parsed.status).toBe('UNMATCHED');
-      expect(parsed.movieId).toBeUndefined();
+      expect(parsed.tmdbId).toBeUndefined();
     });
 
-    it('validates MediaItem with attached assets and movie', () => {
+    it('validates a full Movie hierarchy (Movie -> Edition -> MediaVersion -> Asset)', () => {
       const now = new Date();
-      const complexItem = {
-        id: 'item_1',
-        movieId: 'movie_1',
+      const hierarchy = {
+        id: 'movie_1',
+        title: 'Blade Runner',
         status: 'MATCHED' as const,
-        matchConfidence: 0.98,
+        tmdbId: 78,
         createdAt: now,
         updatedAt: now,
-        assets: [
+        editions: [
           {
-            id: 'asset_1',
-            mediaItemId: 'item_1',
-            type: AssetType.VIDEO,
-            path: '/path/video.mkv',
-            sizeBytes: 1000,
-            mtime: now,
-            present: true,
+            id: 'ed_1',
+            movieId: 'movie_1',
+            name: 'The Final Cut',
             createdAt: now,
             updatedAt: now,
+            mediaVersions: [
+              {
+                id: 'ver_1',
+                editionId: 'ed_1',
+                name: '2160p Remux',
+                createdAt: now,
+                updatedAt: now,
+                assets: [
+                  {
+                    id: 'asset_1',
+                    mediaVersionId: 'ver_1',
+                    type: AssetType.VIDEO,
+                    path: '/media/Blade Runner/Final Cut.mkv',
+                    sizeBytes: 50_000_000_000,
+                    mtime: now,
+                    present: true,
+                    createdAt: now,
+                    updatedAt: now,
+                    technicalMetadata: {
+                      id: 'tech_1',
+                      assetId: 'asset_1',
+                      container: 'matroska',
+                      videoCodec: 'hevc',
+                      width: 3840,
+                      height: 2160,
+                      createdAt: now,
+                      updatedAt: now,
+                    },
+                  },
+                ],
+              },
+            ],
           },
         ],
-        movie: {
-          id: 'movie_1',
-          title: 'The Matrix',
-          createdAt: now,
-          updatedAt: now,
-        },
       };
 
-      const parsed = mediaItemWithAssetsSchema.parse(complexItem);
-      expect(parsed.assets).toHaveLength(1);
-      expect(parsed.movie?.title).toBe('The Matrix');
-      expect(parsed.status).toBe('MATCHED');
-    });
-
-    it('rejects invalid status', () => {
-      expect(() =>
-        mediaItemSchema.parse({
-          id: 'item_1',
-          status: 'INVALID_STATUS',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }),
-      ).toThrow();
+      const parsed = movieWithEditionsSchema.parse(hierarchy);
+      expect(parsed.editions).toHaveLength(1);
+      expect(parsed.editions[0].mediaVersions).toHaveLength(1);
+      expect(parsed.editions[0].mediaVersions[0].assets).toHaveLength(1);
+      expect(parsed.editions[0].mediaVersions[0].assets[0].technicalMetadata?.videoCodec).toBe(
+        'hevc',
+      );
     });
   });
 
