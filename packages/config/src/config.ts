@@ -5,7 +5,7 @@ export type LogLevel = z.infer<typeof logLevelSchema>;
 
 export const configSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required and cannot be empty'),
-  TMDB_API_TOKEN: z.string().min(1, 'TMDB_API_TOKEN is required and cannot be empty'),
+  TMDB_API_TOKEN: z.string().optional(),
   FFPROBE_PATH: z.string().min(1).default('ffprobe'),
   LOG_LEVEL: logLevelSchema.default('info'),
 });
@@ -25,7 +25,7 @@ let cachedConfig: Config | null = null;
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const result = configSchema.safeParse({
     DATABASE_URL: env.DATABASE_URL || 'file:./medialoom.db',
-    TMDB_API_TOKEN: env.TMDB_API_TOKEN || 'development_token',
+    TMDB_API_TOKEN: env.TMDB_API_TOKEN || undefined,
     FFPROBE_PATH: env.FFPROBE_PATH,
     LOG_LEVEL: env.LOG_LEVEL,
   });

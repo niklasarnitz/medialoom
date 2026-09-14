@@ -37,14 +37,14 @@ describe('Config Validation', () => {
     }
   });
 
-  it('fails when TMDB_API_TOKEN is missing', () => {
+  it('allows TMDB_API_TOKEN to be omitted from env', () => {
     const result = safeParseConfig({
       DATABASE_URL: 'file:./test.db',
     });
 
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some((i) => i.path.includes('TMDB_API_TOKEN'))).toBe(true);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.TMDB_API_TOKEN).toBeUndefined();
     }
   });
 
@@ -61,7 +61,7 @@ describe('Config Validation', () => {
   it('loadConfig provides fallback for local execution when env variables are empty', () => {
     const config = loadConfig({});
     expect(config.DATABASE_URL).toBe('file:./medialoom.db');
-    expect(config.TMDB_API_TOKEN).toBe('development_token');
+    expect(config.TMDB_API_TOKEN).toBeUndefined();
     expect(config.FFPROBE_PATH).toBe('ffprobe');
     expect(config.LOG_LEVEL).toBe('info');
   });
