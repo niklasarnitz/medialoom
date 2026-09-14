@@ -2,10 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, normalize, resolve } from 'node:path';
 import { AssetType } from '@medialoom/contracts';
 import { PrismaClient } from '@prisma/client';
-import { closeDatabaseConnection, getPrismaClient, InventoryRepository } from '../src';
+import {
+  canonicalizeAssetPath,
+  closeDatabaseConnection,
+  getPrismaClient,
+  InventoryRepository,
+} from '../src';
 
 describe('InventoryRepository', () => {
   let repo: InventoryRepository;
@@ -20,106 +25,201 @@ describe('InventoryRepository', () => {
     await closeDatabaseConnection();
   });
 
-  describe('Unmatched MediaItem creation and retrieval', () => {
-    it('creates an unmatched MediaItem without a movie and retrieves it', async () => {
-      const created = await repo.createMediaItem({
+  describe('Unmatched Movie creation and retrieval', () => {
+    it('creates an unmatched Movie without TMDb ID and retrieves it', async () => {
+      const created = await repo.createMovie({
+        title: 'Unmatched Raw Film',
+        year: 2021,
         status: 'UNMATCHED',
       });
 
       expect(created.id).toBeDefined();
-      expect(created.movieId).toBeNull();
+      expect(created.title).toBe('Unmatched Raw Film');
+      expect(created.tmdbId).toBeNull();
       expect(created.status).toBe('UNMATCHED');
       expect(created.matchConfidence).toBeNull();
 
-      const retrieved = await repo.getMediaItem(created.id);
+      const retrieved = await repo.getMovie(created.id);
       expect(retrieved).not.toBeNull();
       expect(retrieved?.id).toBe(created.id);
-      expect(retrieved?.movieId).toBeNull();
-      expect(retrieved?.movie).toBeNull();
-      expect(retrieved?.assets).toEqual([]);
       expect(retrieved?.status).toBe('UNMATCHED');
+      expect(retrieved?.editions).toEqual([]);
     });
   });
 
-  describe('Multiple Assets belonging to one MediaItem', () => {
-    it('attaches multiple assets (video and other types) to a single MediaItem', async () => {
-      const mediaItem = await repo.createMediaItem({
-        status: 'UNMATCHED',
-      });
-
-      const videoAsset = await repo.createAsset({
-        mediaItemId: mediaItem.id,
-        type: AssetType.VIDEO,
-        path: `/media/library/movie-part1-${Date.now()}.mkv`,
-        sizeBytes: 8_500_000_000,
-        mtime: new Date('2024-01-01T12:00:00Z'),
-      });
-
-      const videoAsset2 = await repo.createAsset({
-        mediaItemId: mediaItem.id,
-        type: AssetType.VIDEO,
-        path: `/media/library/movie-part2-${Date.now()}.mkv`,
-        sizeBytes: 7_800_000_000,
-        mtime: new Date('2024-01-01T12:05:00Z'),
-      });
-
-      expect(videoAsset.mediaItemId).toBe(mediaItem.id);
-      expect(videoAsset2.mediaItemId).toBe(mediaItem.id);
-      expect(videoAsset.sizeBytes).toBe(8_500_000_000);
-
-      // Verify via mediaItem lookup
-      const retrieved = await repo.getMediaItem(mediaItem.id);
-      expect(retrieved).not.toBeNull();
-      expect(retrieved?.assets).toHaveLength(2);
-      expect(retrieved?.assets.map((a) => a.id).sort()).toEqual(
-        [videoAsset.id, videoAsset2.id].sort(),
-      );
-
-      // Verify via getAssetsByMediaItemId
-      const assetsList = await repo.getAssetsByMediaItemId(mediaItem.id);
-      expect(assetsList).toHaveLength(2);
-    });
-  });
-
-  describe('Movie existing separately from MediaItem', () => {
-    it('creates and retrieves a canonical Movie independently of any MediaItem', async () => {
-      const tmdbId = 999000 + Math.floor(Math.random() * 1000);
-      const imdbId = `tt${9000000 + Math.floor(Math.random() * 100000)}`;
-
+  describe('Media Hierarchy (Movie -> Edition -> MediaVersion -> Asset)', () => {
+    it('supports one Movie with multiple Editions (Theatrical vs Extended)', async () => {
       const movie = await repo.createMovie({
-        title: 'Interstellar',
-        originalTitle: 'Interstellar',
-        year: 2014,
-        runtimeMinutes: 169,
-        overview: 'A team of explorers travel through a wormhole in space...',
-        tmdbId,
-        imdbId,
-      });
-
-      expect(movie.id).toBeDefined();
-      expect(movie.title).toBe('Interstellar');
-      expect(movie.tmdbId).toBe(tmdbId);
-
-      const retrieved = await repo.getMovie(movie.id);
-      expect(retrieved).not.toBeNull();
-      expect(retrieved?.title).toBe('Interstellar');
-      expect(retrieved?.year).toBe(2014);
-
-      // Can also look up by TMDb ID
-      const byTmdb = await repo.findMovieByTmdbId(tmdbId);
-      expect(byTmdb).not.toBeNull();
-      expect(byTmdb?.id).toBe(movie.id);
-
-      // Can later associate this Movie with a MediaItem
-      const mediaItem = await repo.createMediaItem({
-        movieId: movie.id,
+        title: `The Lord of the Rings: The Fellowship of the Ring (${Date.now()})`,
+        year: 2001,
         status: 'MATCHED',
-        matchConfidence: 0.99,
       });
 
-      const itemWithMovie = await repo.getMediaItem(mediaItem.id);
-      expect(itemWithMovie?.movieId).toBe(movie.id);
-      expect(itemWithMovie?.movie?.title).toBe('Interstellar');
+      const theatrical = await repo.createEdition({
+        movieId: movie.id,
+        name: 'Theatrical Cut',
+      });
+
+      const extended = await repo.createEdition({
+        movieId: movie.id,
+        name: 'Extended Edition',
+      });
+
+      expect(theatrical.movieId).toBe(movie.id);
+      expect(extended.movieId).toBe(movie.id);
+
+      const movieHierarchy = await repo.getMovie(movie.id);
+      expect(movieHierarchy?.editions).toHaveLength(2);
+      const names = movieHierarchy?.editions.map((e) => e.name).sort();
+      expect(names).toEqual(['Extended Edition', 'Theatrical Cut']);
+    });
+
+    it('supports one Edition with multiple MediaVersions (2160p UHD vs 1080p BluRay)', async () => {
+      const movie = await repo.createMovie({
+        title: `Inception Multi-Version (${Date.now()})`,
+        year: 2010,
+        status: 'MATCHED',
+      });
+
+      const edition = await repo.createEdition({
+        movieId: movie.id,
+        name: 'Theatrical',
+      });
+
+      const ver4k = await repo.createMediaVersion({
+        editionId: edition.id,
+        name: '2160p UHD BluRay',
+      });
+
+      const ver1080p = await repo.createMediaVersion({
+        editionId: edition.id,
+        name: '1080p BluRay',
+      });
+
+      expect(ver4k.editionId).toBe(edition.id);
+      expect(ver1080p.editionId).toBe(edition.id);
+
+      const editionWithVersions = await repo.getEdition(edition.id);
+      expect(editionWithVersions?.mediaVersions).toHaveLength(2);
+      const versionNames = editionWithVersions?.mediaVersions.map((v) => v.name).sort();
+      expect(versionNames).toEqual(['1080p BluRay', '2160p UHD BluRay']);
+    });
+
+    it('supports one MediaVersion with multiple Assets for CD1/CD2 multipart media', async () => {
+      const movie = await repo.createMovie({
+        title: `Titanic Multipart (${Date.now()})`,
+        year: 1997,
+        status: 'MATCHED',
+      });
+
+      const edition = await repo.createEdition({
+        movieId: movie.id,
+      });
+
+      const version = await repo.createMediaVersion({
+        editionId: edition.id,
+        name: 'DVD Rip',
+      });
+
+      const cd1 = await repo.createAsset({
+        mediaVersionId: version.id,
+        type: AssetType.VIDEO,
+        path: `/media/movies/Titanic/Titanic-cd1-${Date.now()}.avi`,
+        sizeBytes: 734_000_000,
+        mtime: new Date('2000-01-01T00:00:00Z'),
+      });
+
+      const cd2 = await repo.createAsset({
+        mediaVersionId: version.id,
+        type: AssetType.VIDEO,
+        path: `/media/movies/Titanic/Titanic-cd2-${Date.now()}.avi`,
+        sizeBytes: 734_000_000,
+        mtime: new Date('2000-01-01T00:00:00Z'),
+      });
+
+      const versionWithAssets = await repo.getMediaVersion(version.id);
+      expect(versionWithAssets?.assets).toHaveLength(2);
+      expect(versionWithAssets?.assets.map((a) => a.id).sort()).toEqual([cd1.id, cd2.id].sort());
+    });
+  });
+
+  describe('Asset Path Canonicalization', () => {
+    it('canonicalizes relative and unnormalized paths at persistence boundary', async () => {
+      const movie = await repo.createMovie({
+        title: `Path Test (${Date.now()})`,
+      });
+      const edition = await repo.createEdition({ movieId: movie.id });
+      const version = await repo.createMediaVersion({ editionId: edition.id });
+
+      const rawPathWithDots = `/media/movies//folder/../test-${Date.now()}.mkv`;
+      const expectedCanonical = normalize(resolve(rawPathWithDots));
+
+      const asset = await repo.createAsset({
+        mediaVersionId: version.id,
+        path: rawPathWithDots,
+        sizeBytes: 1024,
+        mtime: new Date(),
+      });
+
+      expect(asset.path).toBe(expectedCanonical);
+      expect(asset.path).not.toContain('//');
+      expect(asset.path).not.toContain('/../');
+
+      // Query by non-canonical path still finds it because getAssetByPath canonicalizes
+      const found = await repo.getAssetByPath(rawPathWithDots);
+      expect(found).not.toBeNull();
+      expect(found?.id).toBe(asset.id);
+      expect(found?.path).toBe(expectedCanonical);
+    });
+
+    it('does not invoke realpath() by default so symlinks are not resolved', () => {
+      const symlinkLikePath = '/var/media/symlink/movie.mp4';
+      const canonical = canonicalizeAssetPath(symlinkLikePath);
+      // canonical is an absolute normalized path without resolving the symlink target
+      expect(canonical).toBe(normalize(resolve(symlinkLikePath)));
+    });
+  });
+
+  describe('MediaTechnicalMetadata (1:1 with Asset)', () => {
+    it('attaches and retrieves technical metadata for an Asset', async () => {
+      const movie = await repo.createMovie({
+        title: `Tech Metadata Test (${Date.now()})`,
+      });
+      const edition = await repo.createEdition({ movieId: movie.id });
+      const version = await repo.createMediaVersion({ editionId: edition.id });
+      const asset = await repo.createAsset({
+        mediaVersionId: version.id,
+        path: `/media/tech-test-${Date.now()}.mkv`,
+        sizeBytes: 5_000_000_000,
+        mtime: new Date(),
+      });
+
+      const tech = await repo.setTechnicalMetadata({
+        assetId: asset.id,
+        container: 'matroska',
+        formatName: 'matroska,webm',
+        durationSeconds: 7200.45,
+        bitRate: 15_000_000,
+        width: 1920,
+        height: 1080,
+        videoCodec: 'h264',
+        audioCodec: 'aac',
+        audioChannels: 6,
+      });
+
+      expect(tech.assetId).toBe(asset.id);
+      expect(tech.videoCodec).toBe('h264');
+      expect(tech.audioChannels).toBe(6);
+      expect(tech.durationSeconds).toBe(7200.45);
+
+      // Verify retrieval through Asset
+      const assetWithTech = await repo.getAsset(asset.id);
+      expect(assetWithTech?.technicalMetadata).not.toBeNull();
+      expect(assetWithTech?.technicalMetadata?.videoCodec).toBe('h264');
+
+      // Verify direct lookup
+      const direct = await repo.getTechnicalMetadataByAssetId(asset.id);
+      expect(direct?.container).toBe('matroska');
     });
   });
 
@@ -173,21 +273,23 @@ describe('InventoryRepository', () => {
   });
 
   describe('Uniqueness constraints', () => {
-    it('enforces uniqueness on Asset path', async () => {
-      const mediaItem = await repo.createMediaItem({});
+    it('enforces uniqueness on canonical Asset path', async () => {
+      const movie = await repo.createMovie({ title: 'Unique Test' });
+      const edition = await repo.createEdition({ movieId: movie.id });
+      const version = await repo.createMediaVersion({ editionId: edition.id });
       const uniquePath = `/unique/path/test-${Date.now()}.mp4`;
 
       await repo.createAsset({
-        mediaItemId: mediaItem.id,
+        mediaVersionId: version.id,
         path: uniquePath,
         sizeBytes: 1024,
         mtime: new Date(),
       });
 
-      // Second asset with identical path must fail
+      // Second asset with equivalent path must fail
       await expect(
         repo.createAsset({
-          mediaItemId: mediaItem.id,
+          mediaVersionId: version.id,
           path: uniquePath,
           sizeBytes: 2048,
           mtime: new Date(),
@@ -223,36 +325,12 @@ describe('InventoryRepository', () => {
     });
   });
 
-  describe('MediaItem listing and filtering', () => {
-    it('lists media items with status filter and pagination', async () => {
-      const reviewItem = await repo.createMediaItem({
-        status: 'REVIEW_REQUIRED',
-      });
-      const organizedItem = await repo.createMediaItem({
-        status: 'ORGANIZED',
-      });
-
-      const reviewItems = await repo.listMediaItems({
-        status: 'REVIEW_REQUIRED',
-      });
-      expect(reviewItems.some((i) => i.id === reviewItem.id)).toBe(true);
-      expect(reviewItems.every((i) => i.status === 'REVIEW_REQUIRED')).toBe(true);
-
-      const organizedItems = await repo.listMediaItems({
-        status: 'ORGANIZED',
-      });
-      expect(organizedItems.some((i) => i.id === organizedItem.id)).toBe(true);
-      expect(organizedItems.every((i) => i.status === 'ORGANIZED')).toBe(true);
-    });
-  });
-
   describe('Fresh migration into an empty database', () => {
     it('deploys migrations onto an empty SQLite file and performs repository operations', async () => {
       const tempDir = mkdtempSync(join(tmpdir(), 'medialoom-db-test-'));
       const tempDbPath = join(tempDir, 'test.db');
 
       try {
-        // Run migrations on fresh database
         execSync('bunx prisma migrate deploy --schema packages/db/prisma/schema.prisma', {
           env: {
             ...process.env,
@@ -261,7 +339,6 @@ describe('InventoryRepository', () => {
           stdio: 'pipe',
         });
 
-        // Connect a fresh PrismaClient to the new database
         const freshPrisma = new PrismaClient({
           datasources: {
             db: {
@@ -272,23 +349,40 @@ describe('InventoryRepository', () => {
 
         const freshRepo = new InventoryRepository(freshPrisma);
 
-        // Perform repository actions on the fresh database
         const scan = await freshRepo.createScan({ rootPath: '/fresh' });
         expect(scan.status).toBe('RUNNING');
 
-        const item = await freshRepo.createMediaItem({ status: 'UNMATCHED' });
-        expect(item.id).toBeDefined();
+        const movie = await freshRepo.createMovie({
+          title: 'Fresh Movie',
+          status: 'UNMATCHED',
+        });
+        expect(movie.id).toBeDefined();
+
+        const edition = await freshRepo.createEdition({ movieId: movie.id });
+        const version = await freshRepo.createMediaVersion({
+          editionId: edition.id,
+        });
 
         const asset = await freshRepo.createAsset({
-          mediaItemId: item.id,
+          mediaVersionId: version.id,
           path: '/fresh/file.mp4',
           sizeBytes: 12345,
           mtime: new Date(),
         });
-        expect(asset.mediaItemId).toBe(item.id);
+        expect(asset.mediaVersionId).toBe(version.id);
 
-        const retrieved = await freshRepo.getMediaItem(item.id);
-        expect(retrieved?.assets).toHaveLength(1);
+        await freshRepo.setTechnicalMetadata({
+          assetId: asset.id,
+          container: 'mp4',
+          videoCodec: 'h264',
+        });
+
+        const retrieved = await freshRepo.getMovie(movie.id);
+        expect(retrieved?.editions).toHaveLength(1);
+        expect(retrieved?.editions[0]?.mediaVersions[0]?.assets).toHaveLength(1);
+        expect(
+          retrieved?.editions[0]?.mediaVersions[0]?.assets[0]?.technicalMetadata?.videoCodec,
+        ).toBe('h264');
 
         await freshPrisma.$disconnect();
       } finally {
