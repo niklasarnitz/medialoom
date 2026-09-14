@@ -7,6 +7,7 @@ import {
   scoreComponentsSchema,
   systemSettingEnvelopeSchema,
 } from './metadata';
+import { layoutDataSchema } from './profile';
 import { doctorReportEnvelopeSchema, systemHealthSchema } from './system';
 
 // ============================================================================
@@ -158,3 +159,4 @@ export const inspectApiEnvelopeSchema = apiSuccessEnvelopeSchema(inspectDataSche
 export const candidatesApiEnvelopeSchema = apiSuccessEnvelopeSchema(candidatesDataSchema);
 export const matchApiEnvelopeSchema = apiSuccessEnvelopeSchema(matchDataSchema);
 export const healthApiEnvelopeSchema = apiSuccessEnvelopeSchema(healthDataSchema);
+export const layoutApiEnvelopeSchema = apiSuccessEnvelopeSchema(layoutDataSchema);

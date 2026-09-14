@@ -11,10 +11,11 @@ import {
   type ItemMatchResult,
   inspectDataSchema,
   itemsDataSchema,
+  layoutEnvelopeSchema,
   matchDataSchema,
   scanDataSchema,
 } from '@medialoom/contracts';
-import type { MatchingService, MetadataService } from '@medialoom/core';
+import type { LayoutService, MatchingService, MetadataService } from '@medialoom/core';
 import { TINY_VIDEO_BUFFER } from '@medialoom/media';
 import { ProviderAuthenticationError, ProviderNetworkError } from '@medialoom/providers';
 import { type CliServices, runCli } from '../src';
@@ -624,5 +625,138 @@ describe('medialoom CLI', () => {
     const parsedMatch = JSON.parse(matchJsonOut);
     expect(parsedMatch.status).toBe('error');
     expect(parsedMatch.error.code).toBe('PROVIDER_NETWORK_ERROR');
+  });
+
+  describe('medialoom layout', () => {
+    const mockPlan = {
+      profile: 'jellyfin',
+      destinationRoot: '/media/dest/movies',
+      directory: 'The Matrix (1999) [tmdbid-603]',
+      destinationDirectory: '/media/dest/movies/The Matrix (1999) [tmdbid-603]',
+      mediaFilename: 'The Matrix (1999) [tmdbid-603].mkv',
+      relativeMediaPath: 'The Matrix (1999) [tmdbid-603]/The Matrix (1999) [tmdbid-603].mkv',
+      destinationMediaPath:
+        '/media/dest/movies/The Matrix (1999) [tmdbid-603]/The Matrix (1999) [tmdbid-603].mkv',
+      sourceMediaPath: '/incoming/The.Matrix.1999.mkv',
+      sidecars: [
+        {
+          filename: 'movie.nfo',
+          type: 'nfo',
+          relativePath: 'The Matrix (1999) [tmdbid-603]/movie.nfo',
+          destinationPath: '/media/dest/movies/The Matrix (1999) [tmdbid-603]/movie.nfo',
+          content: '<movie><title>The Matrix</title></movie>',
+        },
+      ],
+    };
+
+    const mockLayoutService = {
+      generateMovieLayout: async (
+        itemId: string,
+        options: { profile?: string; destinationRoot: string },
+      ) => {
+        if (itemId === 'missing_id') {
+          throw new Error(`MediaItem "missing_id" not found in inventory.`);
+        }
+        if (itemId === 'unmatched_id') {
+          throw new Error(
+            'Cannot generate layout for unmatched movie "Unmatched" (status: UNMATCHED).',
+          );
+        }
+        if (options.profile === 'invalid_profile') {
+          throw new Error('Output profile "invalid_profile" is not supported.');
+        }
+        return mockPlan;
+      },
+    } as unknown as LayoutService;
+
+    it('calculates layout in human-readable mode', async () => {
+      let stdout = '';
+      let stderr = '';
+      const code = await runCli(
+        [
+          'layout',
+          'movie_matrix_id',
+          '--profile',
+          'jellyfin',
+          '--destination',
+          '/media/dest/movies',
+        ],
+        {
+          stdout: { write: (c) => (stdout += c) },
+          stderr: { write: (c) => (stderr += c) },
+        },
+        { layoutService: mockLayoutService },
+      );
+
+      expect(code).toBe(ExitCode.SUCCESS);
+      expect(stdout).toContain('MediaLoom Layout Plan (Profile: jellyfin)');
+      expect(stdout).toContain('movie_matrix_id');
+      expect(stdout).toContain('The Matrix (1999) [tmdbid-603]');
+      expect(stdout).toContain('movie.nfo (nfo, 40 bytes)');
+      expect(stderr).toBe('');
+    });
+
+    it('calculates layout in --json mode conforming to schema', async () => {
+      let jsonStdout = '';
+      const code = await runCli(
+        [
+          'layout',
+          'movie_matrix_id',
+          '--profile',
+          'jellyfin',
+          '--destination',
+          '/media/dest/movies',
+          '--json',
+        ],
+        {
+          stdout: { write: (c) => (jsonStdout += c) },
+          stderr: { write: () => {} },
+        },
+        { layoutService: mockLayoutService },
+      );
+
+      expect(code).toBe(ExitCode.SUCCESS);
+      const parsed = JSON.parse(jsonStdout);
+      const validated = layoutEnvelopeSchema.parse(parsed);
+      expect(validated.schemaVersion).toBe(1);
+      expect(validated.data.itemId).toBe('movie_matrix_id');
+      expect(validated.data.profile).toBe('jellyfin');
+      expect(validated.data.plan.directory).toBe('The Matrix (1999) [tmdbid-603]');
+      expect(validated.data.plan.mediaFilename).toBe('The Matrix (1999) [tmdbid-603].mkv');
+      expect(validated.data.plan.sidecars).toHaveLength(1);
+    });
+
+    it('returns error when missing itemId or destination', async () => {
+      let stderr1 = '';
+      const code1 = await runCli(
+        ['layout'],
+        { stdout: { write: () => {} }, stderr: { write: (c) => (stderr1 += c) } },
+        { layoutService: mockLayoutService },
+      );
+      expect(code1).toBe(ExitCode.INVALID_INPUT);
+      expect(stderr1).toContain('Missing required <id> argument');
+
+      let stderr2 = '';
+      const code2 = await runCli(
+        ['layout', 'movie_matrix_id'],
+        { stdout: { write: () => {} }, stderr: { write: (c) => (stderr2 += c) } },
+        { layoutService: mockLayoutService },
+      );
+      expect(code2).toBe(ExitCode.INVALID_INPUT);
+      expect(stderr2).toContain('Missing required --destination');
+    });
+
+    it('returns error when item is not found or unmatched', async () => {
+      let jsonOut = '';
+      const code = await runCli(
+        ['layout', 'unmatched_id', '--destination', '/dest', '--json'],
+        { stdout: { write: (c) => (jsonOut += c) }, stderr: { write: () => {} } },
+        { layoutService: mockLayoutService },
+      );
+      expect(code).toBe(ExitCode.GENERIC_FAILURE);
+      const parsed = JSON.parse(jsonOut);
+      expect(parsed.status).toBe('error');
+      expect(parsed.error.message).toContain('Cannot generate layout for unmatched movie');
+    });
   });
 });

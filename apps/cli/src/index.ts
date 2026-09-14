@@ -1,12 +1,14 @@
 import { ErrorCode, ExitCode, type ItemMatchResult } from '@medialoom/contracts';
 import {
   defaultInventoryService,
+  defaultLayoutService,
   defaultMatchingService,
   defaultMetadataService,
   defaultMovieMatcher,
   defaultSystemService,
   extractLocalMovieMetadata,
   type InventoryService,
+  type LayoutService,
   type MatchingService,
   type MetadataService,
   mapErrorToStructured,
@@ -23,6 +25,7 @@ export interface CliServices {
   inventoryService?: InventoryService;
   metadataService?: MetadataService;
   matchingService?: MatchingService;
+  layoutService?: LayoutService;
 }
 
 function serializeJson(data: unknown): string {
@@ -43,6 +46,8 @@ export async function runCli(
   const positional: string[] = [];
   let providerFlag = 'tmdb';
   let idFlag: string | undefined;
+  let profileFlag = 'jellyfin';
+  let destinationFlag: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -56,6 +61,14 @@ export async function runCli(
       idFlag = args[++i];
     } else if (arg.startsWith('--id=')) {
       idFlag = arg.slice('--id='.length);
+    } else if (arg === '--profile') {
+      profileFlag = args[++i] ?? 'jellyfin';
+    } else if (arg.startsWith('--profile=')) {
+      profileFlag = arg.slice('--profile='.length);
+    } else if (arg === '--destination' || arg === '-d') {
+      destinationFlag = args[++i];
+    } else if (arg.startsWith('--destination=')) {
+      destinationFlag = arg.slice('--destination='.length);
     } else if (arg.startsWith('-')) {
       flags.add(arg);
     } else {
@@ -72,17 +85,20 @@ export async function runCli(
   let inventoryService: InventoryService;
   let metadataService: MetadataService;
   let matchingService: MatchingService;
+  let layoutService: LayoutService;
 
   if ('getVersion' in systemOrServices) {
     systemService = systemOrServices;
     inventoryService = inventoryServiceArg ?? defaultInventoryService;
     metadataService = defaultMetadataService;
     matchingService = defaultMatchingService;
+    layoutService = defaultLayoutService;
   } else {
     systemService = systemOrServices.systemService ?? defaultSystemService;
     inventoryService = systemOrServices.inventoryService ?? defaultInventoryService;
     metadataService = systemOrServices.metadataService ?? defaultMetadataService;
     matchingService = systemOrServices.matchingService ?? defaultMatchingService;
+    layoutService = systemOrServices.layoutService ?? defaultLayoutService;
   }
 
   function emitSuccess(commandName: string, data: unknown): void {
@@ -131,6 +147,7 @@ export async function runCli(
         '  inspect <id>        Inspect details and metadata for a media item',
         '  candidates <id>     Search TMDb for candidate metadata for an item',
         '  match <id>          Match item to provider (supports --provider <p> --id <id>)',
+        '  layout <id>         Calculate output layout plan (supports --profile <p> --destination <d>)',
         '  config get [key]    Get configuration setting from database',
         '  config set <key> <v> Set configuration setting in SQLite database',
         '  doctor              Run environment and system diagnostics',
@@ -144,6 +161,8 @@ export async function runCli(
         '  --no-input          Disable interactive prompts',
         '  --provider <p>      Metadata provider for matching (default: tmdb)',
         '  --id <id>           Provider movie ID for manual match override',
+        '  --profile <p>       Output server profile (default: jellyfin)',
+        '  --destination, -d   Destination root directory for layout calculation',
         '',
         'Exit Codes:',
         '  0                   Success',
@@ -693,6 +712,74 @@ export async function runCli(
       'Usage: medialoom config get [key] | medialoom config set <key> <value>',
     );
     return ExitCode.INVALID_INPUT;
+  }
+
+  if (command === 'layout') {
+    const itemId = positional[1];
+    if (!itemId) {
+      emitError(
+        'layout',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required <id> argument for layout command.',
+        },
+        'Error: Missing required <id> argument for layout command.',
+      );
+      return ExitCode.INVALID_INPUT;
+    }
+
+    if (!destinationFlag) {
+      emitError(
+        'layout',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required --destination <path> argument for layout command.',
+        },
+        'Error: Missing required --destination <path> argument for layout command.',
+      );
+      return ExitCode.INVALID_INPUT;
+    }
+
+    try {
+      const plan = await layoutService.generateMovieLayout(itemId, {
+        profile: profileFlag,
+        destinationRoot: destinationFlag,
+      });
+
+      if (isJson) {
+        emitSuccess('layout', {
+          itemId,
+          profile: plan.profile,
+          plan,
+        });
+      } else {
+        const lines: string[] = [
+          `MediaLoom Layout Plan (Profile: ${plan.profile})`,
+          `  Item ID:       ${itemId}`,
+          `  Destination:   ${plan.destinationDirectory}`,
+          `  Media File:    ${plan.mediaFilename}`,
+          `  Media Target:  ${plan.destinationMediaPath}`,
+          '  Sidecars:',
+        ];
+        for (const sidecar of plan.sidecars) {
+          lines.push(
+            `    - ${sidecar.filename} (${sidecar.type}, ${sidecar.content.length} bytes)`,
+          );
+          lines.push(`      Target: ${sidecar.destinationPath}`);
+        }
+        lines.push('');
+        streams.stdout.write(lines.join('\n'));
+      }
+      return ExitCode.SUCCESS;
+    } catch (err) {
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'layout',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Layout error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
+    }
   }
 
   emitError(
