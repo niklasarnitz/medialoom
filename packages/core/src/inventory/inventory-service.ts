@@ -9,8 +9,10 @@ import {
 } from '@medialoom/db';
 import {
   defaultFfprobeAdapter,
+  detectEdition,
   discoverMediaFiles,
   type NormalizedTechnicalMetadata,
+  normalizeEditionLabel,
 } from '@medialoom/media';
 
 export interface MediaInspector {
@@ -62,6 +64,7 @@ export class InventoryService {
         try {
           const existingAsset = await this.repo.getAssetByPath(file.path);
           let assetId: string;
+          let editionId: string | null = null;
           let shouldInspectTechnical = false;
 
           if (existingAsset) {
@@ -104,11 +107,17 @@ export class InventoryService {
               status: 'UNMATCHED',
             });
 
-            // Edition creation
+            // Edition detection & creation
+            const detected = detectEdition(file.path, file.parsed.edition);
             const edition = await this.repo.createEdition({
               movieId: movie.id,
-              name: file.parsed.edition ?? null,
+              name: detected.rawName,
+              normalizedName: detected.normalizedName,
+              type: detected.type,
+              source: detected.source,
+              needsReview: detected.needsReview,
             });
+            editionId = edition.id;
 
             // MediaVersion creation
             const versionNameParts = [file.parsed.screenSize, file.parsed.source].filter(Boolean);
@@ -180,6 +189,15 @@ export class InventoryService {
                   isForced: s.isForced ?? false,
                 })),
               });
+
+              if (editionId && technical.durationSeconds) {
+                const mins = Math.round(technical.durationSeconds / 60);
+                if (mins > 0) {
+                  await this.repo.updateEdition(editionId, {
+                    runtimeMinutes: mins,
+                  });
+                }
+              }
             } catch {
               // One failed technical inspection must not abort the whole scan.
               // We track the asset but mark it as failed in scan metrics.
@@ -240,6 +258,107 @@ export class InventoryService {
 
   async getItem(id: string): Promise<MovieWithHierarchy | null> {
     return this.repo.getMovie(id);
+  }
+
+  /**
+   * Manually assigns or overrides edition for a media version.
+   * Users can assign standard cuts (e.g. Theatrical Cut, Final Cut, Director's Cut, Extended Edition)
+   * or custom user-defined edition names.
+   */
+  async assignEdition(input: {
+    versionId: string;
+    name?: string | null;
+    normalizedName?: string | null;
+    type?: string | null;
+    custom?: boolean;
+  }): Promise<MovieWithHierarchy> {
+    const version = await this.repo.getMediaVersion(input.versionId);
+    if (!version) {
+      throw new Error(`MediaVersion "${input.versionId}" not found.`);
+    }
+
+    const currentEdition = await this.repo.getEdition(version.editionId);
+    if (!currentEdition) {
+      throw new Error(`Edition "${version.editionId}" not found.`);
+    }
+
+    const movie = await this.repo.getMovie(currentEdition.movieId);
+    if (!movie) {
+      throw new Error(`Movie "${currentEdition.movieId}" not found.`);
+    }
+
+    const rawName = input.name?.trim() || null;
+    let normalizedName: string | null = null;
+    let editionType: string | null = null;
+
+    if (rawName) {
+      if (input.custom) {
+        normalizedName = input.normalizedName ?? rawName;
+        editionType = input.type ?? 'CUSTOM';
+      } else {
+        const normalized = normalizeEditionLabel(rawName);
+        normalizedName = input.normalizedName ?? normalized.normalizedName;
+        editionType = input.type ?? normalized.type;
+      }
+    } else {
+      normalizedName = null;
+      editionType = 'DEFAULT';
+    }
+
+    // Check if target movie already has an edition matching this normalizedName
+    const matchingEdition = (movie.editions ?? []).find(
+      (e) =>
+        e.id !== currentEdition.id &&
+        (e.normalizedName ?? '').trim().toLowerCase() ===
+          (normalizedName ?? '').trim().toLowerCase(),
+    );
+
+    if (matchingEdition) {
+      // Move this version to the existing edition
+      await this.repo.updateMediaVersion(version.id, {
+        editionId: matchingEdition.id,
+      });
+
+      // If currentEdition has no remaining versions, delete it
+      const remainingVersions = currentEdition.mediaVersions.filter((v) => v.id !== version.id);
+      if (remainingVersions.length === 0) {
+        await this.repo.deleteEdition(currentEdition.id);
+      }
+    } else {
+      // If current edition only contains this version, update current edition in-place
+      if (currentEdition.mediaVersions.length === 1) {
+        await this.repo.updateEdition(currentEdition.id, {
+          name: rawName,
+          normalizedName,
+          type: editionType,
+          source: 'MANUAL',
+          needsReview: false,
+        });
+      } else {
+        // Create new edition and move this version
+        const newEdition = await this.repo.createEdition({
+          movieId: movie.id,
+          name: rawName,
+          normalizedName,
+          type: editionType,
+          source: 'MANUAL',
+          needsReview: false,
+        });
+        await this.repo.updateMediaVersion(version.id, {
+          editionId: newEdition.id,
+        });
+      }
+    }
+
+    const updatedMovie = await this.repo.getMovie(movie.id);
+    if (!updatedMovie) {
+      throw new Error(`Movie "${movie.id}" not found after edition update.`);
+    }
+    return updatedMovie;
+  }
+
+  async listEditionsNeedingReview() {
+    return this.repo.listEditionsNeedingReview();
   }
 }
 

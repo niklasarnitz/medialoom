@@ -241,6 +241,11 @@ export class InventoryRepository {
         ...(input.id ? { id: input.id } : {}),
         movieId: input.movieId,
         name: input.name ?? null,
+        normalizedName: input.normalizedName ?? null,
+        type: input.type ?? null,
+        source: input.source ?? null,
+        runtimeMinutes: input.runtimeMinutes ?? null,
+        needsReview: input.needsReview ?? false,
       },
     });
   }
@@ -249,7 +254,15 @@ export class InventoryRepository {
     const input = updateEditionInputSchema.parse(rawInput);
     return this.prisma.edition.update({
       where: { id },
-      data: input,
+      data: {
+        ...(input.movieId !== undefined ? { movieId: input.movieId } : {}),
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.normalizedName !== undefined ? { normalizedName: input.normalizedName } : {}),
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.source !== undefined ? { source: input.source } : {}),
+        ...(input.runtimeMinutes !== undefined ? { runtimeMinutes: input.runtimeMinutes } : {}),
+        ...(input.needsReview !== undefined ? { needsReview: input.needsReview } : {}),
+      },
     });
   }
 
@@ -271,6 +284,14 @@ export class InventoryRepository {
       where: { movieId },
       include: editionIncludeHierarchy,
       orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async listEditionsNeedingReview(): Promise<EditionWithHierarchy[]> {
+    return this.prisma.edition.findMany({
+      where: { needsReview: true },
+      include: editionIncludeHierarchy,
+      orderBy: { createdAt: 'desc' },
     });
   }
 

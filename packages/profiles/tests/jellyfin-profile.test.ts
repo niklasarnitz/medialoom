@@ -27,6 +27,11 @@ describe('JellyfinMovieProfile', () => {
           id: 'edition-1',
           movieId: 'movie-123',
           name: 'Standard',
+          normalizedName: null,
+          type: 'DEFAULT',
+          source: 'DEFAULT',
+          runtimeMinutes: null,
+          needsReview: false,
           createdAt: new Date(),
           updatedAt: new Date(),
           mediaVersions: [
@@ -115,6 +120,11 @@ describe('JellyfinMovieProfile', () => {
           id: 'edition-1',
           movieId: 'movie-456',
           name: 'Standard',
+          normalizedName: null,
+          type: 'DEFAULT',
+          source: 'DEFAULT',
+          runtimeMinutes: null,
+          needsReview: false,
           createdAt: new Date(),
           updatedAt: new Date(),
           mediaVersions: [

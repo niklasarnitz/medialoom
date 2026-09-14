@@ -27,6 +27,11 @@ describe('Stage 9: Jellyfin Multi-Version Output Layout', () => {
           id: 'edition-theatrical',
           movieId: 'movie-matrix-603',
           name: null,
+          normalizedName: null,
+          type: 'DEFAULT',
+          source: 'DEFAULT',
+          runtimeMinutes: 136,
+          needsReview: false,
           createdAt: new Date(),
           updatedAt: new Date(),
           mediaVersions: [

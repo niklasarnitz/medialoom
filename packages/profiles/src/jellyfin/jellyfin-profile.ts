@@ -24,13 +24,16 @@ export class JellyfinMovieProfile implements MovieOutputProfile {
     const destinationDirectory = resolveContainedPath(destinationRoot, folderName);
 
     // 2. Collect versions to plan
-    const collectedVersions: MediaVersionWithHierarchy[] = [];
+    const collectedVersions: {
+      version: MediaVersionWithHierarchy;
+      edition?: { name?: string | null; normalizedName?: string | null };
+    }[] = [];
     if (movie.editions) {
       for (const edition of movie.editions) {
         if (editionId && edition.id !== editionId) continue;
         for (const version of edition.mediaVersions ?? []) {
           if (versionId && version.id !== versionId) continue;
-          collectedVersions.push(version);
+          collectedVersions.push({ version, edition });
         }
       }
     }
@@ -50,11 +53,13 @@ export class JellyfinMovieProfile implements MovieOutputProfile {
         sourceMediaPath: sourcePathOverride,
       });
     } else if (collectedVersions.length > 0) {
-      const descriptors = collectedVersions.map(extractVersionDescriptor);
+      const descriptors = collectedVersions.map(({ version, edition }) =>
+        extractVersionDescriptor(version, edition),
+      );
       const resolvedLabels = resolveVersionLabels(descriptors);
       const isMultiVersion = collectedVersions.length > 1;
 
-      for (const version of collectedVersions) {
+      for (const { version } of collectedVersions) {
         const primaryAsset = version.assets[0];
         const sourcePath = primaryAsset?.path ?? null;
         const ext = sourcePath ? path.extname(sourcePath) || '.mkv' : '.mkv';

@@ -300,9 +300,11 @@ export class MatchingService {
     targetMovie: MovieWithHierarchy,
   ): Promise<void> {
     for (const edition of sourceItem.editions ?? []) {
-      const targetEdition = (targetMovie.editions ?? []).find(
-        (e) => (e.name ?? '').trim().toLowerCase() === (edition.name ?? '').trim().toLowerCase(),
-      );
+      const sourceKey = (edition.normalizedName || edition.name || '').trim().toLowerCase();
+      const targetEdition = (targetMovie.editions ?? []).find((e) => {
+        const targetKey = (e.normalizedName || e.name || '').trim().toLowerCase();
+        return targetKey === sourceKey;
+      });
 
       if (targetEdition) {
         for (const version of edition.mediaVersions ?? []) {

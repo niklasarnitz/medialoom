@@ -1,4 +1,5 @@
 import type { MediaVersionWithHierarchy } from '@medialoom/db';
+import { normalizeEditionLabel } from '@medialoom/media';
 
 export interface MediaVersionDescriptor {
   id?: string;
@@ -156,10 +157,11 @@ export function normalizeAudio(codec?: string | null, channels?: number | null):
 }
 
 /**
- * Extracts a MediaVersionDescriptor from a MediaVersion record
+ * Extracts a MediaVersionDescriptor from a MediaVersion record and optional parent Edition
  */
 export function extractVersionDescriptor(
   version: MediaVersionWithHierarchy,
+  edition?: { name?: string | null; normalizedName?: string | null } | null,
 ): MediaVersionDescriptor {
   const primaryAsset = version.assets[0];
   const technical = primaryAsset?.technicalMetadata;
@@ -172,7 +174,11 @@ export function extractVersionDescriptor(
   const audioCodec = technical?.audioCodec || filename?.audioCodec || null;
   const audioChannels = technical?.audioChannels || null;
   const releaseGroup = filename?.releaseGroup || null;
-  const edition = filename?.edition || null;
+
+  const rawEdition = edition?.normalizedName || edition?.name || filename?.edition || null;
+  const editionNormalized = rawEdition
+    ? normalizeEditionLabel(rawEdition).normalizedName || rawEdition
+    : null;
 
   return {
     id: version.id,
@@ -186,23 +192,16 @@ export function extractVersionDescriptor(
     audioCodec,
     audioChannels,
     releaseGroup,
-    edition,
+    edition: editionNormalized,
     rawName: version.name,
     assetPath: primaryAsset?.path,
   };
 }
 
 /**
- * Generates the primary/base Jellyfin version label for a descriptor.
- * Examples:
- * - "2160p UHD BluRay"
- * - "1080p BluRay"
- * - "576p DVD"
- * - "1080p WEB-DL"
- * - "DVD"
- * - "1080p"
+ * Generates physical version label (e.g. "2160p UHD BluRay", "1080p BluRay", "DVD")
  */
-export function generateBaseVersionLabel(desc: MediaVersionDescriptor): string {
+export function generatePhysicalVersionLabel(desc: MediaVersionDescriptor): string {
   if (desc.resolution && desc.source) {
     if (desc.source === 'UHD BluRay' && desc.resolution === '2160p') {
       return '2160p UHD BluRay';
@@ -233,6 +232,27 @@ export function generateBaseVersionLabel(desc: MediaVersionDescriptor): string {
   }
 
   return 'Default';
+}
+
+/**
+ * Generates deterministic composed Jellyfin version label following preferred order:
+ * [Edition] - [Physical Version]
+ *
+ * When only one edition exists or edition is default/unknown, unnecessary edition text is omitted.
+ * When physical version is unspecified, clean edition label is used.
+ */
+export function generateBaseVersionLabel(desc: MediaVersionDescriptor): string {
+  const physical = generatePhysicalVersionLabel(desc);
+  const edition = desc.edition?.trim();
+
+  if (edition && edition !== 'Default') {
+    if (physical && physical !== 'Default' && physical.toLowerCase() !== edition.toLowerCase()) {
+      return `${edition} - ${physical}`;
+    }
+    return edition;
+  }
+
+  return physical;
 }
 
 /**

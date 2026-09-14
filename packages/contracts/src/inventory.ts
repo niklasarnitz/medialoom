@@ -298,6 +298,11 @@ export const editionSchema = z.object({
   id: z.string().min(1),
   movieId: z.string().min(1),
   name: z.string().nullable().optional(),
+  normalizedName: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  runtimeMinutes: z.number().int().nonnegative().nullable().optional(),
+  needsReview: z.boolean().default(false),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -312,14 +317,33 @@ export const createEditionInputSchema = z.object({
   id: z.string().min(1).optional(),
   movieId: z.string().min(1),
   name: z.string().nullable().optional(),
+  normalizedName: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  runtimeMinutes: z.number().int().nonnegative().nullable().optional(),
+  needsReview: z.boolean().default(false).optional(),
 });
 export type CreateEditionInput = z.input<typeof createEditionInputSchema>;
 
 export const updateEditionInputSchema = z.object({
   movieId: z.string().min(1).optional(),
   name: z.string().nullable().optional(),
+  normalizedName: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  runtimeMinutes: z.number().int().nonnegative().nullable().optional(),
+  needsReview: z.boolean().optional(),
 });
 export type UpdateEditionInput = z.input<typeof updateEditionInputSchema>;
+
+export const assignEditionInputSchema = z.object({
+  versionId: z.string().min(1),
+  name: z.string().nullable().optional(),
+  normalizedName: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  custom: z.boolean().default(false).optional(),
+});
+export type AssignEditionInput = z.input<typeof assignEditionInputSchema>;
 
 // ============================================================================
 // Movie Contracts

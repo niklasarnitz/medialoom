@@ -51,6 +51,8 @@ export async function runCli(
   let idFlag: string | undefined;
   let profileFlag = 'jellyfin';
   let destinationFlag: string | undefined;
+  let nameFlag: string | undefined;
+  let customFlag = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -72,6 +74,14 @@ export async function runCli(
       destinationFlag = args[++i];
     } else if (arg.startsWith('--destination=')) {
       destinationFlag = arg.slice('--destination='.length);
+    } else if (arg === '--name' || arg === '--edition') {
+      nameFlag = args[++i];
+    } else if (arg.startsWith('--name=')) {
+      nameFlag = arg.slice('--name='.length);
+    } else if (arg.startsWith('--edition=')) {
+      nameFlag = arg.slice('--edition='.length);
+    } else if (arg === '--custom') {
+      customFlag = true;
     } else if (arg.startsWith('-')) {
       flags.add(arg);
     } else {
@@ -157,6 +167,8 @@ export async function runCli(
         '  plan <id>           Generate, validate, and persist OperationPlan',
         '  plans               List persisted OperationPlans',
         '  plan-show <id>      Inspect details of a persisted OperationPlan',
+        '  edition-set <id>    Assign or override edition for a media version (--name <name>)',
+        '  edition-reviews     List all editions requiring user review',
         '  config get [key]    Get configuration setting from database',
         '  config set <key> <v> Set configuration setting in SQLite database',
         '  doctor              Run environment and system diagnostics',
@@ -369,7 +381,18 @@ export async function runCli(
 
         lines.push('', '  Editions:');
         for (const edition of item.editions) {
-          lines.push(`    - Edition: ${edition.name || 'Standard'} (ID: ${edition.id})`);
+          const reviewTag = edition.needsReview ? ' [NEEDS REVIEW]' : '';
+          const normStr =
+            edition.normalizedName && edition.normalizedName !== edition.name
+              ? ` (Normalized: "${edition.normalizedName}")`
+              : '';
+          const typeStr = edition.type && edition.type !== 'DEFAULT' ? ` [${edition.type}]` : '';
+          const runtimeStr = edition.runtimeMinutes ? ` [${edition.runtimeMinutes} min]` : '';
+          const displayName = edition.normalizedName || edition.name || 'Standard';
+
+          lines.push(
+            `    - Edition: ${displayName}${normStr}${typeStr}${runtimeStr}${reviewTag} (ID: ${edition.id})`,
+          );
           for (const version of edition.mediaVersions) {
             lines.push(`      - Version: ${version.name || 'Default'} (ID: ${version.id})`);
             for (const asset of version.assets) {
@@ -1011,6 +1034,99 @@ export async function runCli(
         'plan-show',
         { code: mapped.code, message: mapped.message, details: mapped.details },
         `Plan-show error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
+    }
+  }
+
+  if (command === 'edition-set') {
+    const versionId = positional[1];
+    if (!versionId) {
+      emitError(
+        'edition-set',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required <versionId> argument for edition-set command.',
+        },
+        'Error: Missing required <versionId> argument for edition-set command.',
+      );
+      return ExitCode.INVALID_INPUT;
+    }
+
+    if (nameFlag === undefined && !flags.has('--name') && !flags.has('--edition')) {
+      emitError(
+        'edition-set',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required --name <editionName> argument for edition-set command.',
+        },
+        'Error: Missing required --name <editionName> argument for edition-set command.',
+      );
+      return ExitCode.INVALID_INPUT;
+    }
+
+    try {
+      const updatedMovie = await inventoryService.assignEdition({
+        versionId,
+        name: nameFlag ?? null,
+        custom: customFlag,
+      });
+
+      if (isJson) {
+        emitSuccess('edition-set', {
+          item: updatedMovie,
+        });
+      } else {
+        streams.stdout.write(
+          `✓ Edition assigned successfully for version ${versionId} on movie "${updatedMovie.title}".\n`,
+        );
+      }
+      return ExitCode.SUCCESS;
+    } catch (err) {
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'edition-set',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Edition-set error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
+    }
+  }
+
+  if (command === 'edition-reviews') {
+    try {
+      const editions = await inventoryService.listEditionsNeedingReview();
+
+      if (isJson) {
+        emitSuccess('edition-reviews', {
+          editions,
+        });
+      } else {
+        if (editions.length === 0) {
+          streams.stdout.write('No editions requiring review.\n');
+        } else {
+          const lines: string[] = [
+            `Editions Requiring Review (${editions.length} total):`,
+            '',
+            `${'EDITION ID'.padEnd(28)} ${'MOVIE ID'.padEnd(28)} ${'RAW NAME'.padEnd(20)} NORMALIZED`,
+            '-'.repeat(95),
+          ];
+          for (const e of editions) {
+            lines.push(
+              `${e.id.padEnd(28)} ${e.movieId.padEnd(28)} ${(e.name ?? '-').padEnd(20)} ${e.normalizedName ?? '-'}`,
+            );
+          }
+          lines.push('');
+          streams.stdout.write(lines.join('\n'));
+        }
+      }
+      return ExitCode.SUCCESS;
+    } catch (err) {
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'edition-reviews',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Edition-reviews error: ${mapped.message}`,
       );
       return mapped.exitCode;
     }

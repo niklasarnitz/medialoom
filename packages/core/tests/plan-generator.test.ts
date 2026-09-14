@@ -22,6 +22,11 @@ describe('PlanGenerator', () => {
         id: 'edition_1',
         movieId: 'movie_matrix_1999',
         name: null,
+        normalizedName: null,
+        type: 'DEFAULT',
+        source: 'DEFAULT',
+        runtimeMinutes: null,
+        needsReview: false,
         createdAt: new Date(),
         updatedAt: new Date(),
         mediaVersions: [

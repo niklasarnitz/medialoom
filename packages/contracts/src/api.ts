@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { movieStatusSchema, movieWithEditionsSchema, scanResultSchema } from './inventory';
+import {
+  editionWithVersionsSchema,
+  movieStatusSchema,
+  movieWithEditionsSchema,
+  scanResultSchema,
+} from './inventory';
 import {
   candidateMatchEvaluationSchema,
   matchDecisionSchema,
@@ -28,6 +33,8 @@ export type ExitCode = (typeof ExitCode)[keyof typeof ExitCode];
 
 export const ErrorCode = {
   ITEM_NOT_FOUND: 'ITEM_NOT_FOUND',
+  EDITION_NOT_FOUND: 'EDITION_NOT_FOUND',
+  VERSION_NOT_FOUND: 'VERSION_NOT_FOUND',
   INVALID_INPUT: 'INVALID_INPUT',
   INVALID_ARGUMENT: 'INVALID_ARGUMENT',
   INVALID_CONFIG: 'INVALID_CONFIG',
@@ -106,6 +113,15 @@ export const matchItemRequestSchema = z.object({
 });
 export type MatchItemRequest = z.infer<typeof matchItemRequestSchema>;
 
+export const assignEditionRequestSchema = z.object({
+  versionId: z.string().min(1),
+  name: z.string().nullable().optional(),
+  normalizedName: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  custom: z.boolean().default(false).optional(),
+});
+export type AssignEditionRequest = z.infer<typeof assignEditionRequestSchema>;
+
 // ============================================================================
 // Concrete Response Data Contracts
 // ============================================================================
@@ -145,6 +161,11 @@ export const matchDataSchema = z.object({
 });
 export type MatchData = z.infer<typeof matchDataSchema>;
 
+export const editionDataSchema = z.object({
+  edition: editionWithVersionsSchema,
+});
+export type EditionData = z.infer<typeof editionDataSchema>;
+
 export const healthDataSchema = systemHealthSchema;
 export type HealthData = z.infer<typeof healthDataSchema>;
 
@@ -170,6 +191,7 @@ export const itemsApiEnvelopeSchema = apiSuccessEnvelopeSchema(itemsDataSchema);
 export const inspectApiEnvelopeSchema = apiSuccessEnvelopeSchema(inspectDataSchema);
 export const candidatesApiEnvelopeSchema = apiSuccessEnvelopeSchema(candidatesDataSchema);
 export const matchApiEnvelopeSchema = apiSuccessEnvelopeSchema(matchDataSchema);
+export const editionApiEnvelopeSchema = apiSuccessEnvelopeSchema(editionDataSchema);
 export const healthApiEnvelopeSchema = apiSuccessEnvelopeSchema(healthDataSchema);
 export const layoutApiEnvelopeSchema = apiSuccessEnvelopeSchema(layoutDataSchema);
 export const planApiEnvelopeSchema = apiSuccessEnvelopeSchema(planDataSchema);

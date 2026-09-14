@@ -38,16 +38,22 @@ model Movie {
 
 
 model Edition {
-  id            String         @id @default(cuid())
-  movieId       String
-  name          String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  movieId        String
+  name           String?
+  normalizedName String?
+  type           String?
+  source         String?
+  runtimeMinutes Int?
+  needsReview    Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
-  movie         Movie          @relation(fields: [movieId], references: [id], onDelete: Cascade)
-  mediaVersions MediaVersion[]
+  movie          Movie          @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  mediaVersions  MediaVersion[]
 
   @@index([movieId])
+  @@index([needsReview])
 }
 
 model MediaVersion {

@@ -29,6 +29,11 @@ describe('Stage 8 Acceptance: Jellyfin Movie Output Profile & NFO Generation', (
           id: 'edition-1',
           movieId: 'movie-matrix-603',
           name: 'Theatrical',
+          normalizedName: 'Theatrical Cut',
+          type: 'THEATRICAL',
+          source: 'FILENAME',
+          runtimeMinutes: 136,
+          needsReview: false,
           createdAt: new Date(),
           updatedAt: new Date(),
           mediaVersions: [

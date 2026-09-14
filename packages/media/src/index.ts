@@ -1,3 +1,4 @@
+export * from './edition/edition-detector';
 export * from './ffprobe/ffprobe-adapter';
 export * from './ffprobe/ffprobe-runner';
 export * from './ffprobe/types';
