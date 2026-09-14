@@ -182,6 +182,7 @@ export class InventoryRepository {
         overview: input.overview ?? null,
         status: input.status,
         matchConfidence: input.matchConfidence ?? null,
+        matchDetails: input.matchDetails ?? null,
         tmdbId: input.tmdbId ?? null,
         imdbId: input.imdbId ?? null,
       },
@@ -193,6 +194,12 @@ export class InventoryRepository {
     return this.prisma.movie.update({
       where: { id },
       data: input,
+    });
+  }
+
+  async deleteMovie(id: string): Promise<Movie> {
+    return this.prisma.movie.delete({
+      where: { id },
     });
   }
 

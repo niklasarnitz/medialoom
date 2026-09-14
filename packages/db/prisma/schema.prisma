@@ -24,6 +24,7 @@ model Movie {
   overview        String?
   status          String    @default("UNMATCHED")
   matchConfidence Float?
+  matchDetails    String?
   tmdbId          Int?      @unique
   imdbId          String?   @unique
   createdAt       DateTime  @default(now())

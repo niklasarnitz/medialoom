@@ -43,6 +43,7 @@ describe('MetadataService', () => {
     overview: 'Overview',
     status: 'UNMATCHED',
     matchConfidence: null,
+    matchDetails: null,
     tmdbId: null,
     imdbId: null,
     createdAt: new Date(),

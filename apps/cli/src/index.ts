@@ -1,8 +1,13 @@
+import type { ItemMatchResult } from '@medialoom/contracts';
 import {
   defaultInventoryService,
+  defaultMatchingService,
   defaultMetadataService,
+  defaultMovieMatcher,
   defaultSystemService,
+  extractLocalMovieMetadata,
   type InventoryService,
+  type MatchingService,
   type MetadataService,
   type SystemService,
 } from '@medialoom/core';
@@ -16,6 +21,7 @@ export interface CliServices {
   systemService?: SystemService;
   inventoryService?: InventoryService;
   metadataService?: MetadataService;
+  matchingService?: MatchingService;
 }
 
 function serializeJson(data: unknown): string {
@@ -34,9 +40,22 @@ export async function runCli(
 ): Promise<number> {
   const flags = new Set<string>();
   const positional: string[] = [];
+  let providerFlag = 'tmdb';
+  let idFlag: string | undefined;
 
-  for (const arg of args) {
-    if (arg.startsWith('-')) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg) continue;
+
+    if (arg === '--provider') {
+      providerFlag = args[++i] ?? 'tmdb';
+    } else if (arg.startsWith('--provider=')) {
+      providerFlag = arg.slice('--provider='.length);
+    } else if (arg === '--id') {
+      idFlag = args[++i];
+    } else if (arg.startsWith('--id=')) {
+      idFlag = arg.slice('--id='.length);
+    } else if (arg.startsWith('-')) {
       flags.add(arg);
     } else {
       positional.push(arg);
@@ -51,15 +70,18 @@ export async function runCli(
   let systemService: SystemService;
   let inventoryService: InventoryService;
   let metadataService: MetadataService;
+  let matchingService: MatchingService;
 
   if ('getVersion' in systemOrServices) {
     systemService = systemOrServices;
     inventoryService = inventoryServiceArg ?? defaultInventoryService;
     metadataService = defaultMetadataService;
+    matchingService = defaultMatchingService;
   } else {
     systemService = systemOrServices.systemService ?? defaultSystemService;
     inventoryService = systemOrServices.inventoryService ?? defaultInventoryService;
     metadataService = systemOrServices.metadataService ?? defaultMetadataService;
+    matchingService = systemOrServices.matchingService ?? defaultMatchingService;
   }
 
   if (isHelp || (!command && !isVersion)) {
@@ -75,6 +97,7 @@ export async function runCli(
         '  items               List media items in the inventory',
         '  inspect <id>        Inspect details and metadata for a media item',
         '  candidates <id>     Search TMDb for candidate metadata for an item',
+        '  match <id>          Match item to provider (supports --provider <p> --id <id>)',
         '  config get [key]    Get configuration setting from database',
         '  config set <key> <v> Set configuration setting in SQLite database',
         '  doctor              Run environment and system diagnostics',
@@ -86,6 +109,8 @@ export async function runCli(
         '  --version, -v       Display MediaLoom version',
         '  --json              Output machine-readable JSON envelope',
         '  --no-input          Disable interactive prompts',
+        '  --provider <p>      Metadata provider for matching (default: tmdb)',
+        '  --id <id>           Provider movie ID for manual match override',
         '',
       ].join('\n'),
     );
@@ -233,6 +258,24 @@ export async function runCli(
           `  ID:     ${item.id}`,
           `  Status: ${item.status}`,
         ];
+        if (item.matchConfidence !== null && item.matchConfidence !== undefined) {
+          lines.push(
+            `  Match Confidence: ${(item.matchConfidence * 100).toFixed(1)}% (${item.matchConfidence.toFixed(2)})`,
+          );
+        }
+        if (item.matchDetails) {
+          try {
+            const parsed = JSON.parse(item.matchDetails);
+            if (parsed.components) {
+              const c = parsed.components;
+              lines.push(
+                `  Score Breakdown:  title=${c.title?.toFixed(2) ?? '-'}, year=${c.year?.toFixed(2) ?? '-'}, runtime=${c.runtime?.toFixed(2) ?? '-'}, rank=${c.providerRank?.toFixed(2) ?? '-'}, penalty=${c.penalty?.toFixed(2) ?? '-'}`,
+              );
+            }
+          } catch {
+            // ignore non-json
+          }
+        }
         if (item.tmdbId) lines.push(`  TMDb ID: ${item.tmdbId}`);
         if (item.imdbId) lines.push(`  IMDb ID: ${item.imdbId}`);
 
@@ -328,6 +371,9 @@ export async function runCli(
 
     try {
       const result = await metadataService.getCandidatesForItem(itemId);
+      const localMetadata = extractLocalMovieMetadata(result.item);
+      const evaluation = defaultMovieMatcher.evaluateCandidates(localMetadata, result.candidates);
+
       if (isJson) {
         streams.stdout.write(
           `${serializeJson({
@@ -335,13 +381,16 @@ export async function runCli(
             itemId: result.item.id,
             query: result.query,
             year: result.year,
+            decision: evaluation.decision,
             candidates: result.candidates,
+            evaluations: evaluation.evaluations,
           })}\n`,
         );
       } else {
         const lines: string[] = [
           `MediaItem: ${result.item.title}${result.year ? ` (${result.year})` : ''} [ID: ${result.item.id}]`,
           `Query: "${result.query}"${result.year ? ` (Year: ${result.year})` : ''}`,
+          `Decision: ${evaluation.decision}`,
           '',
         ];
         if (result.candidates.length === 0) {
@@ -349,11 +398,16 @@ export async function runCli(
         } else {
           lines.push(`Candidates (${result.candidates.length} found):`);
           lines.push('');
-          for (const [i, c] of result.candidates.entries()) {
+          for (const [i, evalItem] of evaluation.evaluations.entries()) {
+            const c = evalItem.candidate;
             const yearStr = c.year ? ` (${c.year})` : '';
+            const scorePercent = (evalItem.score * 100).toFixed(0);
+            const comp = evalItem.components;
+            const breakdown = `[title=${comp.title.toFixed(2)}, year=${comp.year.toFixed(2)}, runtime=${comp.runtime.toFixed(2)}, rank=${comp.providerRank.toFixed(2)}, penalty=${comp.penalty.toFixed(2)}]`;
             lines.push(
               `  [${i + 1}] [${c.provider.toUpperCase()} ${c.providerId}] ${c.title}${yearStr}`,
             );
+            lines.push(`      Score: ${evalItem.score.toFixed(2)} (${scorePercent}%) ${breakdown}`);
             if (c.overview) {
               const truncated =
                 c.overview.length > 120 ? `${c.overview.slice(0, 117)}...` : c.overview;
@@ -374,6 +428,91 @@ export async function runCli(
         streams.stdout.write(`${serializeJson({ schemaVersion: 1, error: message })}\n`);
       } else {
         streams.stderr.write(`Candidates error: ${message}\n`);
+      }
+      return 1;
+    }
+  }
+
+  if (command === 'match') {
+    const itemId = positional[1];
+    if (!itemId) {
+      if (isJson) {
+        streams.stdout.write(
+          `${serializeJson({ schemaVersion: 1, error: 'Missing required <id> argument for match command.' })}\n`,
+        );
+      } else {
+        streams.stderr.write('Error: Missing required <id> argument for match command.\n');
+      }
+      return 1;
+    }
+
+    try {
+      let result: ItemMatchResult;
+      if (idFlag !== undefined) {
+        result = await matchingService.manualMatch(itemId, {
+          provider: providerFlag,
+          id: idFlag,
+        });
+      } else {
+        result = await matchingService.matchItem(itemId);
+      }
+
+      if (isJson) {
+        streams.stdout.write(
+          `${serializeJson({
+            schemaVersion: 1,
+            itemId: result.itemId,
+            decision: result.decision,
+            score: result.score,
+            components: result.components,
+            matched: result.decision === 'AUTO_MATCH',
+            isManual: result.isManual,
+            candidate: result.selectedCandidate,
+            evaluations: result.evaluations,
+          })}\n`,
+        );
+      } else {
+        const lines: string[] = [
+          'MediaLoom Match Decision',
+          `  Item ID:   ${result.itemId}`,
+          `  Decision:  ${result.decision}`,
+        ];
+        if (result.score !== null && result.score !== undefined) {
+          lines.push(
+            `  Score:     ${result.score.toFixed(2)} (${(result.score * 100).toFixed(0)}%)`,
+          );
+        }
+        if (result.components) {
+          const comp = result.components;
+          lines.push(
+            `  Breakdown: title=${comp.title.toFixed(2)}, year=${comp.year.toFixed(2)}, runtime=${comp.runtime.toFixed(2)}, providerRank=${comp.providerRank.toFixed(2)}, penalty=${comp.penalty.toFixed(2)}`,
+          );
+        }
+        if (result.selectedCandidate) {
+          const c = result.selectedCandidate;
+          lines.push(
+            `  Matched:   [${c.provider.toUpperCase()} ${c.providerId}] ${c.title}${c.year ? ` (${c.year})` : ''}`,
+          );
+          if (c.runtimeMinutes) {
+            lines.push(`  Runtime:   ${c.runtimeMinutes} min`);
+          }
+          if (c.imdbId) {
+            lines.push(`  IMDb ID:   ${c.imdbId}`);
+          }
+        }
+        if (result.isManual) {
+          lines.push('  Mode:      Manual match override');
+        }
+        lines.push('');
+        streams.stdout.write(lines.join('\n'));
+      }
+      return 0;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isJson) {
+        streams.stdout.write(`${serializeJson({ schemaVersion: 1, error: message })}\n`);
+      } else {
+        streams.stderr.write(`Match error: ${message}\n`);
       }
       return 1;
     }

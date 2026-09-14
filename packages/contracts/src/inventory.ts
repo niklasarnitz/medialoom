@@ -315,6 +315,7 @@ export const createEditionInputSchema = z.object({
 export type CreateEditionInput = z.input<typeof createEditionInputSchema>;
 
 export const updateEditionInputSchema = z.object({
+  movieId: z.string().min(1).optional(),
   name: z.string().nullable().optional(),
 });
 export type UpdateEditionInput = z.input<typeof updateEditionInputSchema>;
@@ -341,6 +342,7 @@ export const movieSchema = z.object({
   overview: z.string().nullable().optional(),
   status: movieStatusSchema,
   matchConfidence: z.number().min(0).max(1).nullable().optional(),
+  matchDetails: z.string().nullable().optional(),
   tmdbId: z.number().int().positive().nullable().optional(),
   imdbId: z.string().nullable().optional(),
   createdAt: z.coerce.date(),
@@ -362,6 +364,7 @@ export const createMovieInputSchema = z.object({
   overview: z.string().nullable().optional(),
   status: movieStatusSchema.default('UNMATCHED'),
   matchConfidence: z.number().min(0).max(1).nullable().optional(),
+  matchDetails: z.string().nullable().optional(),
   tmdbId: z.number().int().positive().nullable().optional(),
   imdbId: z.string().nullable().optional(),
 });
@@ -376,6 +379,7 @@ export const updateMovieInputSchema = z.object({
   overview: z.string().nullable().optional(),
   status: movieStatusSchema.optional(),
   matchConfidence: z.number().min(0).max(1).nullable().optional(),
+  matchDetails: z.string().nullable().optional(),
   tmdbId: z.number().int().positive().nullable().optional(),
   imdbId: z.string().nullable().optional(),
 });

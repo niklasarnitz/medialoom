@@ -34,8 +34,58 @@ export const candidatesEnvelopeSchema = z.object({
   query: z.string(),
   year: z.number().int().nullable().optional(),
   candidates: z.array(movieMetadataCandidateSchema),
+  evaluations: z.array(z.lazy(() => candidateMatchEvaluationSchema)).optional(),
 });
 export type CandidatesEnvelope = z.infer<typeof candidatesEnvelopeSchema>;
+
+// ============================================================================
+// Movie Matching Contracts
+// ============================================================================
+
+export const matchDecisionSchema = z.enum(['AUTO_MATCH', 'REVIEW_REQUIRED', 'UNMATCHED']);
+export type MatchDecision = z.infer<typeof matchDecisionSchema>;
+
+export const scoreComponentsSchema = z.object({
+  title: z.number(),
+  year: z.number(),
+  runtime: z.number(),
+  providerRank: z.number(),
+  penalty: z.number().default(0),
+});
+export type ScoreComponents = z.infer<typeof scoreComponentsSchema>;
+
+export const candidateMatchEvaluationSchema = z.object({
+  candidate: movieMetadataCandidateSchema,
+  score: z.number(),
+  components: scoreComponentsSchema,
+  rank: z.number(),
+  reasons: z.array(z.string()),
+});
+export type CandidateMatchEvaluation = z.infer<typeof candidateMatchEvaluationSchema>;
+
+export const itemMatchResultSchema = z.object({
+  itemId: z.string().min(1),
+  decision: matchDecisionSchema,
+  score: z.number().nullable(),
+  components: scoreComponentsSchema.nullable().optional(),
+  selectedCandidate: movieMetadataCandidateSchema.nullable().optional(),
+  evaluations: z.array(candidateMatchEvaluationSchema),
+  isManual: z.boolean().default(false),
+});
+export type ItemMatchResult = z.infer<typeof itemMatchResultSchema>;
+
+export const matchEnvelopeSchema = z.object({
+  schemaVersion: z.literal(1).default(1),
+  itemId: z.string().min(1),
+  decision: matchDecisionSchema,
+  score: z.number().nullable().optional(),
+  components: scoreComponentsSchema.nullable().optional(),
+  matched: z.boolean(),
+  isManual: z.boolean().default(false),
+  candidate: movieMetadataCandidateSchema.nullable().optional(),
+  evaluations: z.array(candidateMatchEvaluationSchema).optional(),
+});
+export type MatchEnvelope = z.infer<typeof matchEnvelopeSchema>;
 
 export const systemSettingEnvelopeSchema = z.object({
   schemaVersion: z.literal(1).default(1),

@@ -3,8 +3,12 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { doctorReportEnvelopeSchema, scanResultSchema } from '@medialoom/contracts';
-import type { MetadataService } from '@medialoom/core';
+import {
+  doctorReportEnvelopeSchema,
+  type ItemMatchResult,
+  scanResultSchema,
+} from '@medialoom/contracts';
+import type { MatchingService, MetadataService } from '@medialoom/core';
 import { TINY_VIDEO_BUFFER } from '@medialoom/media';
 import { type CliServices, runCli } from '../src';
 
@@ -392,5 +396,170 @@ describe('medialoom CLI', () => {
 
     expect(missingCode).toBe(1);
     expect(missingErr).toContain('Missing required <id>');
+  });
+
+  it('handles match command in automatic and manual override modes (--json and human)', async () => {
+    const mockAutoResult: ItemMatchResult = {
+      itemId: 'movie_matrix_id',
+      decision: 'AUTO_MATCH',
+      score: 0.98,
+      components: {
+        title: 0.6,
+        year: 0.25,
+        runtime: 0.1,
+        providerRank: 0.05,
+        penalty: 0,
+      },
+      selectedCandidate: {
+        provider: 'tmdb',
+        providerId: '603',
+        title: 'The Matrix',
+        year: 1999,
+        runtimeMinutes: 136,
+        tmdbId: 603,
+        imdbId: 'tt0133093',
+      },
+      evaluations: [
+        {
+          candidate: {
+            provider: 'tmdb',
+            providerId: '603',
+            title: 'The Matrix',
+            year: 1999,
+            tmdbId: 603,
+          },
+          score: 0.98,
+          components: {
+            title: 0.6,
+            year: 0.25,
+            runtime: 0.1,
+            providerRank: 0.05,
+            penalty: 0,
+          },
+          rank: 0,
+          reasons: ['Title exact match', 'Year exact match'],
+        },
+      ],
+      isManual: false,
+    };
+
+    const mockManualResult: ItemMatchResult = {
+      itemId: 'movie_matrix_id',
+      decision: 'AUTO_MATCH',
+      score: 1.0,
+      components: {
+        title: 0.6,
+        year: 0.25,
+        runtime: 0.1,
+        providerRank: 0.05,
+        penalty: 0,
+      },
+      selectedCandidate: {
+        provider: 'tmdb',
+        providerId: '603',
+        title: 'The Matrix',
+        year: 1999,
+        runtimeMinutes: 136,
+        tmdbId: 603,
+        imdbId: 'tt0133093',
+      },
+      evaluations: [],
+      isManual: true,
+    };
+
+    const mockServices: CliServices = {
+      matchingService: {
+        matchItem: async (id: string) => {
+          if (id === 'movie_matrix_id') return mockAutoResult;
+          throw new Error(`Item ${id} not found`);
+        },
+        manualMatch: async (id: string, info: { provider: string; id: string | number }) => {
+          if (id === 'movie_matrix_id' && String(info.id) === '603') return mockManualResult;
+          throw new Error('Manual match failed');
+        },
+      } as unknown as MatchingService,
+    };
+
+    // 1. match <id> in human mode
+    let autoOut = '';
+    const autoCode = await runCli(
+      ['match', 'movie_matrix_id'],
+      {
+        stdout: { write: (c) => (autoOut += c) },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
+    expect(autoCode).toBe(0);
+    expect(autoOut).toContain('MediaLoom Match Decision');
+    expect(autoOut).toContain('Decision:  AUTO_MATCH');
+    expect(autoOut).toContain('Score:     0.98');
+    expect(autoOut).toContain('[TMDB 603] The Matrix (1999)');
+    expect(autoOut).toContain('Runtime:   136 min');
+
+    // 2. match <id> in --json mode
+    let jsonOut = '';
+    const jsonCode = await runCli(
+      ['match', 'movie_matrix_id', '--json'],
+      {
+        stdout: { write: (c) => (jsonOut += c) },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
+    expect(jsonCode).toBe(0);
+    const parsedAuto = JSON.parse(jsonOut);
+    expect(parsedAuto.schemaVersion).toBe(1);
+    expect(parsedAuto.decision).toBe('AUTO_MATCH');
+    expect(parsedAuto.score).toBe(0.98);
+    expect(parsedAuto.components.title).toBe(0.6);
+    expect(parsedAuto.matched).toBe(true);
+    expect(parsedAuto.isManual).toBe(false);
+    expect(parsedAuto.candidate.tmdbId).toBe(603);
+
+    // 3. match <id> --provider tmdb --id 603 (manual override)
+    let manualOut = '';
+    const manualCode = await runCli(
+      ['match', 'movie_matrix_id', '--provider', 'tmdb', '--id', '603'],
+      {
+        stdout: { write: (c) => (manualOut += c) },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
+    expect(manualCode).toBe(0);
+    expect(manualOut).toContain('MediaLoom Match Decision');
+    expect(manualOut).toContain('Mode:      Manual match override');
+    expect(manualOut).toContain('[TMDB 603] The Matrix (1999)');
+
+    // 4. match <id> --provider tmdb --id 603 --json
+    let manualJsonOut = '';
+    const manualJsonCode = await runCli(
+      ['match', 'movie_matrix_id', '--provider', 'tmdb', '--id', '603', '--json'],
+      {
+        stdout: { write: (c) => (manualJsonOut += c) },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
+    expect(manualJsonCode).toBe(0);
+    const parsedManual = JSON.parse(manualJsonOut);
+    expect(parsedManual.schemaVersion).toBe(1);
+    expect(parsedManual.decision).toBe('AUTO_MATCH');
+    expect(parsedManual.score).toBe(1.0);
+    expect(parsedManual.isManual).toBe(true);
+
+    // 5. match missing item ID
+    let missingErr = '';
+    const missingCode = await runCli(
+      ['match'],
+      {
+        stdout: { write: () => {} },
+        stderr: { write: (c) => (missingErr += c) },
+      },
+      mockServices,
+    );
+    expect(missingCode).toBe(1);
+    expect(missingErr).toContain('Missing required <id> argument for match command');
   });
 });
