@@ -7,12 +7,14 @@ export type {
   Movie,
   OperationPlan,
   Prisma,
+  ReviewQueueItem,
   Scan,
   SystemMetadata,
 } from '@prisma/client';
 export * from './client';
 export * from './repositories/inventory-repository';
 export * from './repositories/plan-repository';
+export * from './repositories/review-repository';
 export * from './repositories/settings-repository';
 export * from './utils/path';
 

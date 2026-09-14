@@ -15,14 +15,18 @@ import {
   type InventoryRepository,
   type OperationPlan,
   type PlanRepository,
+  type ReviewRepository,
 } from '@medialoom/db';
 import { DomainError, ItemNotFoundError } from '../errors';
+import { ReviewService, defaultReviewService } from '../review/review-service';
 import { defaultPlanGenerator, type PlanGenerator } from './plan-generator';
 import { defaultPlanValidator, type PlanValidator } from './plan-validator';
 
 export interface PlanServiceOptions {
   inventoryRepo?: InventoryRepository;
   planRepo?: PlanRepository;
+  reviewRepo?: ReviewRepository;
+  reviewService?: ReviewService;
   generator?: PlanGenerator;
   validator?: PlanValidator;
 }
@@ -30,12 +34,22 @@ export interface PlanServiceOptions {
 export class PlanService {
   private inventoryRepo: InventoryRepository;
   private planRepo: PlanRepository;
+  private reviewService: ReviewService;
   private generator: PlanGenerator;
   private validator: PlanValidator;
 
   constructor(options: PlanServiceOptions = {}) {
     this.inventoryRepo = options.inventoryRepo ?? defaultInventoryRepository;
     this.planRepo = options.planRepo ?? defaultPlanRepository;
+    this.reviewService =
+      options.reviewService ??
+      (options.reviewRepo
+        ? new ReviewService({
+            reviewRepo: options.reviewRepo,
+            planRepo: this.planRepo,
+            inventoryRepo: this.inventoryRepo,
+          })
+        : defaultReviewService);
     this.generator = options.generator ?? defaultPlanGenerator;
     this.validator = options.validator ?? defaultPlanValidator;
   }
@@ -100,7 +114,10 @@ export class PlanService {
       validatedAt,
     });
 
-    return this.mapToDto(record, operations, validation);
+    const planDto = this.mapToDto(record, operations, validation);
+    await this.reviewService.createReviewItemForPlan(planDto, movie);
+
+    return planDto;
   }
 
   async getPlan(id: string): Promise<OperationPlanDto | null> {

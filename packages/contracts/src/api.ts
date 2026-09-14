@@ -13,8 +13,8 @@ import {
   systemSettingEnvelopeSchema,
 } from './metadata';
 import { operationPlanDtoSchema } from './plan';
-
 import { layoutDataSchema } from './profile';
+import { reviewActionResponseSchema, reviewQueueItemDtoSchema } from './review';
 import { doctorReportEnvelopeSchema, systemHealthSchema } from './system';
 
 // ============================================================================
@@ -47,6 +47,9 @@ export const ErrorCode = {
   PROVIDER_NETWORK_ERROR: 'PROVIDER_NETWORK_ERROR',
   CONFLICT: 'CONFLICT',
   SCAN_FAILED: 'SCAN_FAILED',
+  REVIEW_NOT_FOUND: 'REVIEW_NOT_FOUND',
+  REVIEW_NOT_APPROVED: 'REVIEW_NOT_APPROVED',
+  PLAN_NOT_APPROVED: 'PLAN_NOT_APPROVED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -185,6 +188,19 @@ export const plansDataSchema = z.object({
 });
 export type PlansData = z.infer<typeof plansDataSchema>;
 
+export const reviewItemDataSchema = z.object({
+  item: reviewQueueItemDtoSchema,
+});
+export type ReviewItemData = z.infer<typeof reviewItemDataSchema>;
+
+export const reviewListDataSchema = z.object({
+  items: z.array(reviewQueueItemDtoSchema),
+});
+export type ReviewListData = z.infer<typeof reviewListDataSchema>;
+
+export const reviewActionDataSchema = reviewActionResponseSchema;
+export type ReviewActionData = z.infer<typeof reviewActionDataSchema>;
+
 // Typed Envelopes
 export const scanApiEnvelopeSchema = apiSuccessEnvelopeSchema(scanDataSchema);
 export const itemsApiEnvelopeSchema = apiSuccessEnvelopeSchema(itemsDataSchema);
@@ -196,3 +212,6 @@ export const healthApiEnvelopeSchema = apiSuccessEnvelopeSchema(healthDataSchema
 export const layoutApiEnvelopeSchema = apiSuccessEnvelopeSchema(layoutDataSchema);
 export const planApiEnvelopeSchema = apiSuccessEnvelopeSchema(planDataSchema);
 export const plansApiEnvelopeSchema = apiSuccessEnvelopeSchema(plansDataSchema);
+export const reviewItemApiEnvelopeSchema = apiSuccessEnvelopeSchema(reviewItemDataSchema);
+export const reviewListApiEnvelopeSchema = apiSuccessEnvelopeSchema(reviewListDataSchema);
+export const reviewActionApiEnvelopeSchema = apiSuccessEnvelopeSchema(reviewActionDataSchema);

@@ -89,6 +89,33 @@ export class ConflictError extends DomainError {
   }
 }
 
+export class ReviewNotFoundError extends DomainError {
+  constructor(reviewId: string) {
+    super(`ReviewQueueItem "${reviewId}" not found.`, {
+      code: ErrorCode.REVIEW_NOT_FOUND,
+      statusCode: 404,
+      exitCode: ExitCodes.GENERIC_FAILURE,
+      details: { reviewId },
+    });
+    this.name = 'ReviewNotFoundError';
+  }
+}
+
+export class ReviewNotApprovedError extends DomainError {
+  constructor(
+    message = 'OperationPlan cannot be executed because its review item has not been explicitly approved.',
+    details?: Record<string, unknown>,
+  ) {
+    super(message, {
+      code: ErrorCode.REVIEW_NOT_APPROVED,
+      statusCode: 422,
+      exitCode: ExitCodes.REVIEW_REQUIRED,
+      details,
+    });
+    this.name = 'ReviewNotApprovedError';
+  }
+}
+
 export interface StructuredErrorResult {
   code: string;
   message: string;

@@ -32,6 +32,7 @@ model Movie {
 
   editions        Edition[]
   operationPlans  OperationPlan[]
+  reviewQueueItems ReviewQueueItem[]
 
   @@index([status])
 }
@@ -197,8 +198,32 @@ model OperationPlan {
   updatedAt       DateTime  @updatedAt
 
   mediaItem       Movie     @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  reviewQueueItem ReviewQueueItem?
 
   @@index([mediaItemId])
   @@index([status])
+}
+
+model ReviewQueueItem {
+  id              String         @id @default(cuid())
+  type            String         @default("FILESYSTEM_CHANGE")
+  status          String         @default("PENDING")
+  mediaItemId     String?
+  operationPlanId String         @unique
+  title           String
+  summary         String
+  detailsJson     String?
+  createdAt       DateTime       @default(now())
+  reviewedAt      DateTime?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  updatedAt       DateTime       @updatedAt
+
+  mediaItem       Movie?         @relation(fields: [mediaItemId], references: [id], onDelete: SetNull)
+  operationPlan   OperationPlan  @relation(fields: [operationPlanId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([type])
+  @@index([mediaItemId])
 }
 

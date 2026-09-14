@@ -420,6 +420,21 @@ export class InventoryRepository {
     });
   }
 
+  async updateAssetPath(oldRawPath: string, newRawPath: string): Promise<Asset | null> {
+    const canonicalOld = canonicalizeAssetPath(oldRawPath);
+    const canonicalNew = canonicalizeAssetPath(newRawPath);
+    const existing = await this.prisma.asset.findUnique({
+      where: { path: canonicalOld },
+    });
+    if (!existing) {
+      return null;
+    }
+    return this.prisma.asset.update({
+      where: { id: existing.id },
+      data: { path: canonicalNew },
+    });
+  }
+
   // ==========================================================================
   // Technical Metadata Operations (1:1 with Asset)
   // ==========================================================================

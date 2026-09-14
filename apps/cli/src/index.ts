@@ -5,7 +5,9 @@ import {
   defaultMatchingService,
   defaultMetadataService,
   defaultMovieMatcher,
+  defaultPlanExecutor,
   defaultPlanService,
+  defaultReviewService,
   defaultSystemService,
   extractLocalMovieMetadata,
   type InventoryService,
@@ -13,7 +15,9 @@ import {
   type MatchingService,
   type MetadataService,
   mapErrorToStructured,
+  type PlanExecutor,
   type PlanService,
+  type ReviewService,
   type SystemService,
 } from '@medialoom/core';
 
@@ -29,6 +33,8 @@ export interface CliServices {
   matchingService?: MatchingService;
   layoutService?: LayoutService;
   planService?: PlanService;
+  reviewService?: ReviewService;
+  planExecutor?: PlanExecutor;
 }
 
 function serializeJson(data: unknown): string {
@@ -100,6 +106,8 @@ export async function runCli(
   let matchingService: MatchingService;
   let layoutService: LayoutService;
   let planService: PlanService;
+  let reviewService: ReviewService;
+  let planExecutor: PlanExecutor;
 
   if ('getVersion' in systemOrServices) {
     systemService = systemOrServices;
@@ -108,6 +116,8 @@ export async function runCli(
     matchingService = defaultMatchingService;
     layoutService = defaultLayoutService;
     planService = defaultPlanService;
+    reviewService = defaultReviewService;
+    planExecutor = defaultPlanExecutor;
   } else {
     systemService = systemOrServices.systemService ?? defaultSystemService;
     inventoryService = systemOrServices.inventoryService ?? defaultInventoryService;
@@ -115,6 +125,8 @@ export async function runCli(
     matchingService = systemOrServices.matchingService ?? defaultMatchingService;
     layoutService = systemOrServices.layoutService ?? defaultLayoutService;
     planService = systemOrServices.planService ?? defaultPlanService;
+    reviewService = systemOrServices.reviewService ?? defaultReviewService;
+    planExecutor = systemOrServices.planExecutor ?? defaultPlanExecutor;
   }
 
   function emitSuccess(commandName: string, data: unknown): void {
@@ -167,6 +179,11 @@ export async function runCli(
         '  plan <id>           Generate, validate, and persist OperationPlan',
         '  plans               List persisted OperationPlans',
         '  plan-show <id>      Inspect details of a persisted OperationPlan',
+        '  review list         List proposed filesystem changes in the review queue',
+        '  review show <id>    Inspect detailed proposal for a review queue item',
+        '  review approve <id> Explicitly approve a proposed filesystem change',
+        '  review reject <id>  Reject a proposed filesystem change without modifying files',
+        '  review apply <id>   Execute an approved filesystem change plan',
         '  edition-set <id>    Assign or override edition for a media version (--name <name>)',
         '  edition-reviews     List all editions requiring user review',
         '  config get [key]    Get configuration setting from database',
@@ -1037,6 +1054,312 @@ export async function runCli(
       );
       return mapped.exitCode;
     }
+  }
+
+  if (
+    command === 'review' ||
+    command === 'review-list' ||
+    command === 'review-show' ||
+    command === 'review-approve' ||
+    command === 'review-reject' ||
+    command === 'review-apply'
+  ) {
+    let subCommand = positional[1];
+    let targetReviewId = positional[2];
+
+    if (command === 'review-list') {
+      subCommand = 'list';
+      targetReviewId = positional[1];
+    } else if (command === 'review-show') {
+      subCommand = 'show';
+      targetReviewId = positional[1];
+    } else if (command === 'review-approve') {
+      subCommand = 'approve';
+      targetReviewId = positional[1];
+    } else if (command === 'review-reject') {
+      subCommand = 'reject';
+      targetReviewId = positional[1];
+    } else if (command === 'review-apply') {
+      subCommand = 'apply';
+      targetReviewId = positional[1];
+    }
+
+    if (!subCommand || subCommand === 'list') {
+      try {
+        const items = await reviewService.listReviewItems();
+
+        if (isJson) {
+          emitSuccess('review list', { items });
+        } else {
+          if (items.length === 0) {
+            streams.stdout.write('No review queue items found.\n');
+          } else {
+            const lines: string[] = [
+              `Review Queue (${items.length} total):`,
+              '',
+              `${'ID'.padEnd(28)} ${'STATUS'.padEnd(12)} ${'TYPE'.padEnd(20)} TITLE`,
+              '-'.repeat(95),
+            ];
+            for (const item of items) {
+              lines.push(
+                `${item.id.padEnd(28)} ${item.status.padEnd(12)} ${item.type.padEnd(20)} ${item.title}`,
+              );
+            }
+            lines.push('');
+            streams.stdout.write(lines.join('\n'));
+          }
+        }
+        return ExitCode.SUCCESS;
+      } catch (err) {
+        const mapped = mapErrorToStructured(err);
+        emitError(
+          'review list',
+          { code: mapped.code, message: mapped.message, details: mapped.details },
+          `Review list error: ${mapped.message}`,
+        );
+        return mapped.exitCode;
+      }
+    }
+
+    if (subCommand === 'show') {
+      if (!targetReviewId) {
+        emitError(
+          'review show',
+          {
+            code: ErrorCode.INVALID_ARGUMENT,
+            message: 'Missing required <id> argument for review show command.',
+          },
+          'Error: Missing required <id> argument for review show command.',
+        );
+        return ExitCode.INVALID_INPUT;
+      }
+
+      try {
+        const item = await reviewService.getReviewItem(targetReviewId);
+        if (!item) {
+          emitError(
+            'review show',
+            {
+              code: ErrorCode.ITEM_NOT_FOUND,
+              message: `ReviewQueueItem "${targetReviewId}" not found.`,
+            },
+            `Review item not found: ${targetReviewId}`,
+          );
+          return ExitCode.GENERIC_FAILURE;
+        }
+
+        if (isJson) {
+          emitSuccess('review show', { item });
+        } else {
+          const lines: string[] = [
+            `Review Queue Item: ${item.id}`,
+            `  Title:       ${item.title}`,
+            `  Type:        ${item.type}`,
+            `  Status:      ${item.status}`,
+            `  Plan ID:     ${item.operationPlanId}`,
+            `  Created:     ${new Date(item.createdAt).toISOString()}`,
+          ];
+          if (item.reviewedAt) {
+            lines.push(`  Reviewed:    ${new Date(item.reviewedAt).toISOString()}`);
+          }
+          if (item.approvedAt) {
+            lines.push(`  Approved:    ${new Date(item.approvedAt).toISOString()}`);
+          }
+          if (item.rejectedAt) {
+            lines.push(`  Rejected:    ${new Date(item.rejectedAt).toISOString()}`);
+          }
+
+          if (item.details?.affectedMovie) {
+            const m = item.details.affectedMovie;
+            lines.push(`  Movie:       ${m.title} ${m.year ? `(${m.year})` : ''} [ID: ${m.id}]`);
+          }
+          if (item.details?.destinationRoot) {
+            lines.push(`  Destination: ${item.details.destinationRoot}`);
+          }
+
+          lines.push('', '  Summary:');
+          const summaryIndented = item.summary
+            .split('\n')
+            .map((l) => `    ${l}`)
+            .join('\n');
+          lines.push(summaryIndented);
+
+          if (item.details?.filesToMove && item.details.filesToMove.length > 0) {
+            lines.push('', `  Files to Move (${item.details.filesToMove.length}):`);
+            for (const m of item.details.filesToMove) {
+              lines.push(`    - ${m.source}`);
+              lines.push(`      → ${m.destination}`);
+              if (m.versionLabel || m.edition) {
+                const labels = [
+                  m.edition ? `Edition: ${m.edition}` : null,
+                  m.versionLabel ? `Version: ${m.versionLabel}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', ');
+                lines.push(`      [${labels}]`);
+              }
+            }
+          }
+
+          if (item.details?.filesToWrite && item.details.filesToWrite.length > 0) {
+            lines.push('', `  Files to Write (${item.details.filesToWrite.length}):`);
+            for (const w of item.details.filesToWrite) {
+              lines.push(`    - ${w.path} (${w.filename})`);
+            }
+          }
+
+          if (item.details?.validation) {
+            lines.push(
+              '',
+              `  Validation:  ${item.details.validation.valid ? 'VALID' : 'INVALID'} (${item.details.validation.issues.length} issues)`,
+            );
+            for (const issue of item.details.validation.issues) {
+              const sev = issue.severity.toUpperCase();
+              lines.push(`    - [${sev}] ${issue.code}: ${issue.message}`);
+            }
+          }
+
+          lines.push('');
+          streams.stdout.write(lines.join('\n'));
+        }
+        return ExitCode.SUCCESS;
+      } catch (err) {
+        const mapped = mapErrorToStructured(err);
+        emitError(
+          'review show',
+          { code: mapped.code, message: mapped.message, details: mapped.details },
+          `Review show error: ${mapped.message}`,
+        );
+        return mapped.exitCode;
+      }
+    }
+
+    if (subCommand === 'approve') {
+      if (!targetReviewId) {
+        emitError(
+          'review approve',
+          {
+            code: ErrorCode.INVALID_ARGUMENT,
+            message: 'Missing required <id> argument for review approve command.',
+          },
+          'Error: Missing required <id> argument for review approve command.',
+        );
+        return ExitCode.INVALID_INPUT;
+      }
+
+      try {
+        const updated = await reviewService.approveReviewItem(targetReviewId);
+
+        if (isJson) {
+          emitSuccess('review approve', {
+            item: updated,
+            action: 'APPROVED',
+            message: `Review item ${targetReviewId} approved successfully.`,
+          });
+        } else {
+          streams.stdout.write(
+            `✓ Review item "${targetReviewId}" approved successfully. Plan is now eligible for execution.\n`,
+          );
+        }
+        return ExitCode.SUCCESS;
+      } catch (err) {
+        const mapped = mapErrorToStructured(err);
+        emitError(
+          'review approve',
+          { code: mapped.code, message: mapped.message, details: mapped.details },
+          `Review approve error: ${mapped.message}`,
+        );
+        return mapped.exitCode;
+      }
+    }
+
+    if (subCommand === 'reject') {
+      if (!targetReviewId) {
+        emitError(
+          'review reject',
+          {
+            code: ErrorCode.INVALID_ARGUMENT,
+            message: 'Missing required <id> argument for review reject command.',
+          },
+          'Error: Missing required <id> argument for review reject command.',
+        );
+        return ExitCode.INVALID_INPUT;
+      }
+
+      try {
+        const updated = await reviewService.rejectReviewItem(targetReviewId);
+
+        if (isJson) {
+          emitSuccess('review reject', {
+            item: updated,
+            action: 'REJECTED',
+            message: `Review item ${targetReviewId} rejected.`,
+          });
+        } else {
+          streams.stdout.write(
+            `✓ Review item "${targetReviewId}" rejected. Media files remain untouched.\n`,
+          );
+        }
+        return ExitCode.SUCCESS;
+      } catch (err) {
+        const mapped = mapErrorToStructured(err);
+        emitError(
+          'review reject',
+          { code: mapped.code, message: mapped.message, details: mapped.details },
+          `Review reject error: ${mapped.message}`,
+        );
+        return mapped.exitCode;
+      }
+    }
+
+    if (subCommand === 'apply') {
+      if (!targetReviewId) {
+        emitError(
+          'review apply',
+          {
+            code: ErrorCode.INVALID_ARGUMENT,
+            message: 'Missing required <id> argument for review apply command.',
+          },
+          'Error: Missing required <id> argument for review apply command.',
+        );
+        return ExitCode.INVALID_INPUT;
+      }
+
+      try {
+        const result = await planExecutor.executeReviewItem(targetReviewId);
+
+        if (isJson) {
+          emitSuccess('review apply', {
+            plan: result.plan,
+            reviewItem: result.reviewItem,
+            executedOperations: result.executedOperations,
+          });
+        } else {
+          streams.stdout.write(
+            `✓ Review item "${targetReviewId}" applied successfully (${result.executedOperations} operations executed).\n`,
+          );
+        }
+        return ExitCode.SUCCESS;
+      } catch (err) {
+        const mapped = mapErrorToStructured(err);
+        emitError(
+          'review apply',
+          { code: mapped.code, message: mapped.message, details: mapped.details },
+          `Review apply error: ${mapped.message}`,
+        );
+        return mapped.exitCode;
+      }
+    }
+
+    emitError(
+      'review',
+      {
+        code: ErrorCode.INVALID_ARGUMENT,
+        message: `Unknown review subcommand "${subCommand}". Usage: medialoom review [list|show|approve|reject|apply]`,
+      },
+      `Unknown review subcommand "${subCommand}". Usage: medialoom review [list|show|approve|reject|apply]`,
+    );
+    return ExitCode.INVALID_INPUT;
   }
 
   if (command === 'edition-set') {

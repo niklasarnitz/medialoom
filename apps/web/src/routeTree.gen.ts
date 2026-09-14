@@ -15,9 +15,14 @@ import { Route as ApiV1ScansRouteImport } from './routes/api/v1/scans'
 import { Route as ApiV1ItemsIndexRouteImport } from './routes/api/v1/items/index'
 import { Route as ApiV1PlansIndexRouteImport } from './routes/api/v1/plans/index'
 import { Route as ApiV1PlansIdRouteImport } from './routes/api/v1/plans/$id'
+import { Route as ApiV1ReviewIndexRouteImport } from './routes/api/v1/review/index'
 import { Route as ApiV1ItemsIdIndexRouteImport } from './routes/api/v1/items/$id/index'
 import { Route as ApiV1ItemsIdCandidatesRouteImport } from './routes/api/v1/items/$id/candidates'
 import { Route as ApiV1ItemsIdMatchRouteImport } from './routes/api/v1/items/$id/match'
+import { Route as ApiV1ReviewIdIndexRouteImport } from './routes/api/v1/review/$id/index'
+import { Route as ApiV1ReviewIdApplyRouteImport } from './routes/api/v1/review/$id/apply'
+import { Route as ApiV1ReviewIdApproveRouteImport } from './routes/api/v1/review/$id/approve'
+import { Route as ApiV1ReviewIdRejectRouteImport } from './routes/api/v1/review/$id/reject'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -49,6 +54,11 @@ const ApiV1PlansIdRoute = ApiV1PlansIdRouteImport.update({
   path: '/api/v1/plans/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1ReviewIndexRoute = ApiV1ReviewIndexRouteImport.update({
+  id: '/api/v1/review/',
+  path: '/api/v1/review/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1ItemsIdIndexRoute = ApiV1ItemsIdIndexRouteImport.update({
   id: '/api/v1/items/$id/',
   path: '/api/v1/items/$id/',
@@ -64,6 +74,26 @@ const ApiV1ItemsIdMatchRoute = ApiV1ItemsIdMatchRouteImport.update({
   path: '/api/v1/items/$id/match',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1ReviewIdIndexRoute = ApiV1ReviewIdIndexRouteImport.update({
+  id: '/api/v1/review/$id/',
+  path: '/api/v1/review/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ReviewIdApplyRoute = ApiV1ReviewIdApplyRouteImport.update({
+  id: '/api/v1/review/$id/apply',
+  path: '/api/v1/review/$id/apply',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ReviewIdApproveRoute = ApiV1ReviewIdApproveRouteImport.update({
+  id: '/api/v1/review/$id/approve',
+  path: '/api/v1/review/$id/approve',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ReviewIdRejectRoute = ApiV1ReviewIdRejectRouteImport.update({
+  id: '/api/v1/review/$id/reject',
+  path: '/api/v1/review/$id/reject',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -72,9 +102,14 @@ export interface FileRoutesByFullPath {
   '/api/v1/plans/$id': typeof ApiV1PlansIdRoute
   '/api/v1/items/': typeof ApiV1ItemsIndexRoute
   '/api/v1/plans/': typeof ApiV1PlansIndexRoute
+  '/api/v1/review/': typeof ApiV1ReviewIndexRoute
   '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
   '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
+  '/api/v1/review/$id/apply': typeof ApiV1ReviewIdApplyRoute
+  '/api/v1/review/$id/approve': typeof ApiV1ReviewIdApproveRoute
+  '/api/v1/review/$id/reject': typeof ApiV1ReviewIdRejectRoute
   '/api/v1/items/$id/': typeof ApiV1ItemsIdIndexRoute
+  '/api/v1/review/$id/': typeof ApiV1ReviewIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -83,9 +118,14 @@ export interface FileRoutesByTo {
   '/api/v1/plans/$id': typeof ApiV1PlansIdRoute
   '/api/v1/items': typeof ApiV1ItemsIndexRoute
   '/api/v1/plans': typeof ApiV1PlansIndexRoute
+  '/api/v1/review': typeof ApiV1ReviewIndexRoute
   '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
   '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
+  '/api/v1/review/$id/apply': typeof ApiV1ReviewIdApplyRoute
+  '/api/v1/review/$id/approve': typeof ApiV1ReviewIdApproveRoute
+  '/api/v1/review/$id/reject': typeof ApiV1ReviewIdRejectRoute
   '/api/v1/items/$id': typeof ApiV1ItemsIdIndexRoute
+  '/api/v1/review/$id': typeof ApiV1ReviewIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -95,9 +135,14 @@ export interface FileRoutesById {
   '/api/v1/plans/$id': typeof ApiV1PlansIdRoute
   '/api/v1/items/': typeof ApiV1ItemsIndexRoute
   '/api/v1/plans/': typeof ApiV1PlansIndexRoute
+  '/api/v1/review/': typeof ApiV1ReviewIndexRoute
   '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
   '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
+  '/api/v1/review/$id/apply': typeof ApiV1ReviewIdApplyRoute
+  '/api/v1/review/$id/approve': typeof ApiV1ReviewIdApproveRoute
+  '/api/v1/review/$id/reject': typeof ApiV1ReviewIdRejectRoute
   '/api/v1/items/$id/': typeof ApiV1ItemsIdIndexRoute
+  '/api/v1/review/$id/': typeof ApiV1ReviewIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -108,9 +153,14 @@ export interface FileRouteTypes {
     | '/api/v1/plans/$id'
     | '/api/v1/items/'
     | '/api/v1/plans/'
+    | '/api/v1/review/'
     | '/api/v1/items/$id/candidates'
     | '/api/v1/items/$id/match'
+    | '/api/v1/review/$id/apply'
+    | '/api/v1/review/$id/approve'
+    | '/api/v1/review/$id/reject'
     | '/api/v1/items/$id/'
+    | '/api/v1/review/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -119,9 +169,14 @@ export interface FileRouteTypes {
     | '/api/v1/plans/$id'
     | '/api/v1/items'
     | '/api/v1/plans'
+    | '/api/v1/review'
     | '/api/v1/items/$id/candidates'
     | '/api/v1/items/$id/match'
+    | '/api/v1/review/$id/apply'
+    | '/api/v1/review/$id/approve'
+    | '/api/v1/review/$id/reject'
     | '/api/v1/items/$id'
+    | '/api/v1/review/$id'
   id:
     | '__root__'
     | '/'
@@ -130,9 +185,14 @@ export interface FileRouteTypes {
     | '/api/v1/plans/$id'
     | '/api/v1/items/'
     | '/api/v1/plans/'
+    | '/api/v1/review/'
     | '/api/v1/items/$id/candidates'
     | '/api/v1/items/$id/match'
+    | '/api/v1/review/$id/apply'
+    | '/api/v1/review/$id/approve'
+    | '/api/v1/review/$id/reject'
     | '/api/v1/items/$id/'
+    | '/api/v1/review/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -142,9 +202,14 @@ export interface RootRouteChildren {
   ApiV1PlansIdRoute: typeof ApiV1PlansIdRoute
   ApiV1ItemsIndexRoute: typeof ApiV1ItemsIndexRoute
   ApiV1PlansIndexRoute: typeof ApiV1PlansIndexRoute
+  ApiV1ReviewIndexRoute: typeof ApiV1ReviewIndexRoute
   ApiV1ItemsIdCandidatesRoute: typeof ApiV1ItemsIdCandidatesRoute
   ApiV1ItemsIdMatchRoute: typeof ApiV1ItemsIdMatchRoute
+  ApiV1ReviewIdApplyRoute: typeof ApiV1ReviewIdApplyRoute
+  ApiV1ReviewIdApproveRoute: typeof ApiV1ReviewIdApproveRoute
+  ApiV1ReviewIdRejectRoute: typeof ApiV1ReviewIdRejectRoute
   ApiV1ItemsIdIndexRoute: typeof ApiV1ItemsIdIndexRoute
+  ApiV1ReviewIdIndexRoute: typeof ApiV1ReviewIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -191,6 +256,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1PlansIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/review/': {
+      id: '/api/v1/review/'
+      path: '/api/v1/review'
+      fullPath: '/api/v1/review/'
+      preLoaderRoute: typeof ApiV1ReviewIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/items/$id/': {
       id: '/api/v1/items/$id/'
       path: '/api/v1/items/$id'
@@ -212,6 +284,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ItemsIdMatchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/review/$id/': {
+      id: '/api/v1/review/$id/'
+      path: '/api/v1/review/$id'
+      fullPath: '/api/v1/review/$id/'
+      preLoaderRoute: typeof ApiV1ReviewIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/review/$id/apply': {
+      id: '/api/v1/review/$id/apply'
+      path: '/api/v1/review/$id/apply'
+      fullPath: '/api/v1/review/$id/apply'
+      preLoaderRoute: typeof ApiV1ReviewIdApplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/review/$id/approve': {
+      id: '/api/v1/review/$id/approve'
+      path: '/api/v1/review/$id/approve'
+      fullPath: '/api/v1/review/$id/approve'
+      preLoaderRoute: typeof ApiV1ReviewIdApproveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/review/$id/reject': {
+      id: '/api/v1/review/$id/reject'
+      path: '/api/v1/review/$id/reject'
+      fullPath: '/api/v1/review/$id/reject'
+      preLoaderRoute: typeof ApiV1ReviewIdRejectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -222,9 +322,14 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1PlansIdRoute: ApiV1PlansIdRoute,
   ApiV1ItemsIndexRoute: ApiV1ItemsIndexRoute,
   ApiV1PlansIndexRoute: ApiV1PlansIndexRoute,
+  ApiV1ReviewIndexRoute: ApiV1ReviewIndexRoute,
   ApiV1ItemsIdCandidatesRoute: ApiV1ItemsIdCandidatesRoute,
   ApiV1ItemsIdMatchRoute: ApiV1ItemsIdMatchRoute,
+  ApiV1ReviewIdApplyRoute: ApiV1ReviewIdApplyRoute,
+  ApiV1ReviewIdApproveRoute: ApiV1ReviewIdApproveRoute,
+  ApiV1ReviewIdRejectRoute: ApiV1ReviewIdRejectRoute,
   ApiV1ItemsIdIndexRoute: ApiV1ItemsIdIndexRoute,
+  ApiV1ReviewIdIndexRoute: ApiV1ReviewIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
