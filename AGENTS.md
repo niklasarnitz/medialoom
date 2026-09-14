@@ -12,7 +12,7 @@ Stack:
 * Zod
 * `guessit-js`
 * `ffprobe`
-* Vitest / Playwright
+* Bun test / Playwright
 
 ## Before changing code
 
@@ -32,6 +32,7 @@ More specific `AGENTS.md` files override general guidance for their area.
 * Scanning and matching never mutate user media.
 * Every MediaLoom filesystem mutation must originate from an explicit `OperationPlan`.
 * Never silently overwrite or delete user files.
+* Infer types from the DB where possible; never create useless or redundant types on your own.
 * Provider-specific and third-party types must not leak into the domain.
 * Do not implement unrelated future stages.
 
