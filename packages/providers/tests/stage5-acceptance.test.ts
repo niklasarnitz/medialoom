@@ -58,7 +58,7 @@ describe('Stage 5 Acceptance Test: TMDb Metadata Provider', () => {
 
     // 4. Perform search using MediaItem properties
     const candidates = await provider.searchMovies({
-      query: mediaItem.title!,
+      query: mediaItem.title ?? 'The Matrix',
       year: mediaItem.year ?? undefined,
     });
 

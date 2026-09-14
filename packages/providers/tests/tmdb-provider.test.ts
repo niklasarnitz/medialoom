@@ -61,9 +61,7 @@ const mockTheMatrixDetailsResult = {
 describe('TmdbMovieProvider', () => {
   it('throws ProviderConfigurationError when API key is missing', async () => {
     const provider = new TmdbMovieProvider();
-    expect(provider.searchMovies({ query: 'Matrix' })).rejects.toThrow(
-      ProviderConfigurationError,
-    );
+    expect(provider.searchMovies({ query: 'Matrix' })).rejects.toThrow(ProviderConfigurationError);
   });
 
   it('performs successful title and year search with mocked network call', async () => {
@@ -81,7 +79,7 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       apiKey: 'test_token_12345',
-      fetchFn: mockFetch as typeof fetch,
+      fetchFn: mockFetch,
     });
 
     const results = await provider.searchMovies({
@@ -91,6 +89,7 @@ describe('TmdbMovieProvider', () => {
 
     expect(results.length).toBe(1);
     const candidate = results[0];
+    if (!candidate) throw new Error('Expected candidate');
     expect(candidate.provider).toBe('tmdb');
     expect(candidate.providerId).toBe('603');
     expect(candidate.tmdbId).toBe(603);
@@ -132,7 +131,7 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       apiKey: 'test_token',
-      fetchFn: mockFetch as typeof fetch,
+      fetchFn: mockFetch,
     });
 
     const results = await provider.searchMovies({ query: 'NonExistentMovie987654321' });
@@ -156,12 +155,10 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       apiKey: 'invalid_token',
-      fetchFn: mockFetch as typeof fetch,
+      fetchFn: mockFetch,
     });
 
-    expect(provider.searchMovies({ query: 'Matrix' })).rejects.toThrow(
-      ProviderAuthenticationError,
-    );
+    expect(provider.searchMovies({ query: 'Matrix' })).rejects.toThrow(ProviderAuthenticationError);
   });
 
   it('handles rate limiting (429) with retry-after header', async () => {
@@ -184,7 +181,7 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       apiKey: 'valid_token',
-      fetchFn: mockFetch as typeof fetch,
+      fetchFn: mockFetch,
     });
 
     try {
@@ -210,11 +207,9 @@ describe('TmdbMovieProvider', () => {
 
     const provider1 = new TmdbMovieProvider({
       apiKey: 'token',
-      fetchFn: mockFetchMalformedJson as typeof fetch,
+      fetchFn: mockFetchMalformedJson,
     });
-    expect(provider1.searchMovies({ query: 'Matrix' })).rejects.toThrow(
-      ProviderResponseError,
-    );
+    expect(provider1.searchMovies({ query: 'Matrix' })).rejects.toThrow(ProviderResponseError);
 
     // 2. JSON that does not adhere to boundary schema (missing results array)
     const mockFetchInvalidSchema = async () => {
@@ -226,11 +221,9 @@ describe('TmdbMovieProvider', () => {
 
     const provider2 = new TmdbMovieProvider({
       apiKey: 'token',
-      fetchFn: mockFetchInvalidSchema as typeof fetch,
+      fetchFn: mockFetchInvalidSchema,
     });
-    expect(provider2.searchMovies({ query: 'Matrix' })).rejects.toThrow(
-      ProviderResponseError,
-    );
+    expect(provider2.searchMovies({ query: 'Matrix' })).rejects.toThrow(ProviderResponseError);
   });
 
   it('handles optional and missing fields gracefully during normalization', async () => {
@@ -257,13 +250,13 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       apiKey: 'token',
-      fetchFn: mockFetchPartial as typeof fetch,
+      fetchFn: mockFetchPartial,
     });
 
     const results = await provider.searchMovies({ query: 'Indie' });
     expect(results.length).toBe(1);
     const item = results[0];
-    expect(item.id).toBeUndefined(); // domain id is separate
+    if (!item) throw new Error('Expected item');
     expect(item.tmdbId).toBe(99999);
     expect(item.title).toBe('Obscure Indie Movie');
     expect(item.originalTitle).toBeNull();
@@ -283,12 +276,10 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       apiKey: 'token',
-      fetchFn: mockFetchNetworkFailure as typeof fetch,
+      fetchFn: mockFetchNetworkFailure,
     });
 
-    expect(provider.searchMovies({ query: 'Matrix' })).rejects.toThrow(
-      ProviderNetworkError,
-    );
+    expect(provider.searchMovies({ query: 'Matrix' })).rejects.toThrow(ProviderNetworkError);
   });
 
   it('retrieves detailed movie metadata with runtime and imdbId via getMovie', async () => {
@@ -301,7 +292,7 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       apiKey: 'token',
-      fetchFn: mockFetch as typeof fetch,
+      fetchFn: mockFetch,
     });
 
     const movie = await provider.getMovie(603);
@@ -329,7 +320,7 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       apiKey: 'token',
-      fetchFn: mockFetch as typeof fetch,
+      fetchFn: mockFetch,
     });
 
     const movie = await provider.getMovie(9999999);
@@ -343,7 +334,7 @@ describe('TmdbMovieProvider', () => {
       return 'dynamic_key_from_db';
     };
 
-    const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const mockFetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
       const authHeader = (init?.headers as Record<string, string>)?.Authorization;
       expect(authHeader).toBe('Bearer dynamic_key_from_db');
       return new Response(JSON.stringify(mockTheMatrixSearchResult), {
@@ -354,7 +345,7 @@ describe('TmdbMovieProvider', () => {
 
     const provider = new TmdbMovieProvider({
       getApiKey: dynamicGetter,
-      fetchFn: mockFetch as typeof fetch,
+      fetchFn: mockFetch,
     });
 
     const results = await provider.searchMovies({ query: 'Matrix' });

@@ -34,7 +34,11 @@ export class ProviderNotFoundError extends ProviderError {
 export class ProviderRateLimitError extends ProviderError {
   readonly retryAfterSeconds?: number;
 
-  constructor(message = 'TMDb rate limit exceeded.', retryAfterSeconds?: number, provider = 'tmdb') {
+  constructor(
+    message = 'TMDb rate limit exceeded.',
+    retryAfterSeconds?: number,
+    provider = 'tmdb',
+  ) {
     super(message, provider, 429);
     this.name = 'ProviderRateLimitError';
     this.retryAfterSeconds = retryAfterSeconds;
@@ -42,7 +46,7 @@ export class ProviderRateLimitError extends ProviderError {
 }
 
 export class ProviderNetworkError extends ProviderError {
-  readonly cause?: unknown;
+  override readonly cause?: unknown;
 
   constructor(message: string, cause?: unknown, provider = 'tmdb') {
     super(message, provider);

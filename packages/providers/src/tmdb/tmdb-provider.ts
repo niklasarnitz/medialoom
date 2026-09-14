@@ -1,7 +1,7 @@
 import {
   type MovieMetadataCandidate,
-  movieMetadataCandidateSchema,
   type MovieSearchQuery,
+  movieMetadataCandidateSchema,
   movieSearchQuerySchema,
 } from '@medialoom/contracts';
 import type { MovieMetadataProvider } from '../types';
@@ -9,21 +9,19 @@ import {
   ProviderAuthenticationError,
   ProviderConfigurationError,
   ProviderNetworkError,
-  ProviderNotFoundError,
   ProviderRateLimitError,
   ProviderResponseError,
 } from './tmdb-errors';
-import {
-  tmdbMovieDetailsResponseSchema,
-  tmdbMovieSearchResponseSchema,
-} from './tmdb-schemas';
+import { tmdbMovieDetailsResponseSchema, tmdbMovieSearchResponseSchema } from './tmdb-schemas';
+
+export type FetchFunction = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 export interface TmdbMovieProviderOptions {
   apiKey?: string;
   getApiKey?: () => Promise<string | null> | string | null;
   baseUrl?: string;
   imageBaseUrl?: string;
-  fetchFn?: typeof fetch;
+  fetchFn?: FetchFunction;
 }
 
 export class TmdbMovieProvider implements MovieMetadataProvider {
@@ -35,15 +33,16 @@ export class TmdbMovieProvider implements MovieMetadataProvider {
   private getApiKeyFn?: () => Promise<string | null> | string | null;
   private baseUrl: string;
   private imageBaseUrl: string;
-  private fetchFn: typeof fetch;
+  private fetchFn: FetchFunction;
 
   constructor(options: TmdbMovieProviderOptions = {}) {
     this.explicitApiKey = options.apiKey;
     this.getApiKeyFn = options.getApiKey;
     this.baseUrl = (options.baseUrl ?? TmdbMovieProvider.DEFAULT_BASE_URL).replace(/\/+$/, '');
-    this.imageBaseUrl = (
-      options.imageBaseUrl ?? TmdbMovieProvider.DEFAULT_IMAGE_BASE_URL
-    ).replace(/\/+$/, '');
+    this.imageBaseUrl = (options.imageBaseUrl ?? TmdbMovieProvider.DEFAULT_IMAGE_BASE_URL).replace(
+      /\/+$/,
+      '',
+    );
     this.fetchFn = options.fetchFn ?? globalThis.fetch.bind(globalThis);
   }
 
@@ -66,7 +65,8 @@ export class TmdbMovieProvider implements MovieMetadataProvider {
   private parseReleaseYear(releaseDate?: string | null): number | null {
     if (!releaseDate) return null;
     const match = releaseDate.match(/^(\d{4})/);
-    return match ? Number.parseInt(match[1], 10) : null;
+    const yearStr = match?.[1];
+    return yearStr ? Number.parseInt(yearStr, 10) : null;
   }
 
   private buildPosterUrl(posterPath?: string | null): string | null {
@@ -75,7 +75,10 @@ export class TmdbMovieProvider implements MovieMetadataProvider {
     return `${this.imageBaseUrl}${cleanPath}`;
   }
 
-  private async request(endpoint: string, params: Record<string, string | number | undefined> = {}): Promise<unknown> {
+  private async request(
+    endpoint: string,
+    params: Record<string, string | number | undefined> = {},
+  ): Promise<unknown> {
     const apiKey = await this.resolveApiKey();
 
     const url = new URL(`${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`);
@@ -104,11 +107,18 @@ export class TmdbMovieProvider implements MovieMetadataProvider {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new ProviderNetworkError(`Network error communicating with TMDb: ${message}`, err, this.name);
+      throw new ProviderNetworkError(
+        `Network error communicating with TMDb: ${message}`,
+        err,
+        this.name,
+      );
     }
 
     if (response.status === 401 || response.status === 403) {
-      throw new ProviderAuthenticationError('TMDb authentication failed: Invalid or expired API key.', this.name);
+      throw new ProviderAuthenticationError(
+        'TMDb authentication failed: Invalid or expired API key.',
+        this.name,
+      );
     }
 
     if (response.status === 404) {
@@ -135,7 +145,12 @@ export class TmdbMovieProvider implements MovieMetadataProvider {
       return json;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new ProviderResponseError(`Failed to parse TMDb JSON response: ${message}`, response.status, undefined, this.name);
+      throw new ProviderResponseError(
+        `Failed to parse TMDb JSON response: ${message}`,
+        response.status,
+        undefined,
+        this.name,
+      );
     }
   }
 

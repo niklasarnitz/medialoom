@@ -1,7 +1,4 @@
-import {
-  type MovieMetadataCandidate,
-  type MovieSearchQuery,
-} from '@medialoom/contracts';
+import type { MovieMetadataCandidate, MovieSearchQuery } from '@medialoom/contracts';
 import {
   defaultInventoryRepository,
   defaultSettingsRepository,
@@ -9,10 +6,7 @@ import {
   type MovieWithHierarchy,
   type SettingsRepository,
 } from '@medialoom/db';
-import {
-  type MovieMetadataProvider,
-  TmdbMovieProvider,
-} from '@medialoom/providers';
+import { type MovieMetadataProvider, TmdbMovieProvider } from '@medialoom/providers';
 
 export interface ItemCandidatesResult {
   item: MovieWithHierarchy;

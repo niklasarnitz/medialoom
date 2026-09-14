@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { defaultSystemService } from '@medialoom/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
+import { useState } from 'react';
 
 export async function getSystemHealthData() {
   return defaultSystemService.getHealth();
@@ -118,7 +118,8 @@ function HomeComponent() {
       >
         <h2 style={{ marginTop: 0 }}>Metadata Provider: TMDb Settings</h2>
         <p style={{ color: '#4a5568', fontSize: '0.95rem' }}>
-          Configure your TMDb API Read Access Token or API Key. The key is securely persisted in the SQLite database and never logged.
+          Configure your TMDb API Read Access Token or API Key. The key is securely persisted in the
+          SQLite database and never logged.
         </p>
 
         <div style={{ marginBottom: '1rem' }}>
@@ -128,13 +129,14 @@ function HomeComponent() {
               Configured ({currentTmdb.maskedKey})
             </span>
           ) : (
-            <span style={{ color: '#c53030', fontWeight: 'bold' }}>
-              Not Configured
-            </span>
+            <span style={{ color: '#c53030', fontWeight: 'bold' }}>Not Configured</span>
           )}
         </div>
 
-        <form onSubmit={handleSaveKey} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <form
+          onSubmit={handleSaveKey}
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+        >
           <label htmlFor="tmdb-key-input" style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
             {currentTmdb.configured ? 'Update TMDb API Key / Token' : 'Enter TMDb API Key / Token'}
           </label>

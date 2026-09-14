@@ -122,8 +122,7 @@ export class SystemService {
       checks.push({
         name: 'tmdb',
         status: 'warn',
-        message:
-          'TMDb API key is not configured. Metadata lookups will be unavailable.',
+        message: 'TMDb API key is not configured. Metadata lookups will be unavailable.',
       });
     }
 

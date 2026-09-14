@@ -349,10 +349,11 @@ export async function runCli(
         } else {
           lines.push(`Candidates (${result.candidates.length} found):`);
           lines.push('');
-          for (let i = 0; i < result.candidates.length; i++) {
-            const c = result.candidates[i];
+          for (const [i, c] of result.candidates.entries()) {
             const yearStr = c.year ? ` (${c.year})` : '';
-            lines.push(`  [${i + 1}] [${c.provider.toUpperCase()} ${c.providerId}] ${c.title}${yearStr}`);
+            lines.push(
+              `  [${i + 1}] [${c.provider.toUpperCase()} ${c.providerId}] ${c.title}${yearStr}`,
+            );
             if (c.overview) {
               const truncated =
                 c.overview.length > 120 ? `${c.overview.slice(0, 117)}...` : c.overview;

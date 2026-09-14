@@ -4,8 +4,9 @@ import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { doctorReportEnvelopeSchema, scanResultSchema } from '@medialoom/contracts';
+import type { MetadataService } from '@medialoom/core';
 import { TINY_VIDEO_BUFFER } from '@medialoom/media';
-import { runCli } from '../src';
+import { type CliServices, runCli } from '../src';
 
 describe('medialoom CLI', () => {
   it('handles --help flag', async () => {
@@ -321,7 +322,7 @@ describe('medialoom CLI', () => {
       },
     ];
 
-    const mockServices = {
+    const mockServices: CliServices = {
       metadataService: {
         getCandidatesForItem: async (id: string) => {
           if (id === 'movie_matrix_id') {
@@ -336,16 +337,20 @@ describe('medialoom CLI', () => {
         },
         searchMovies: async () => mockCandidates,
         getMovie: async () => mockCandidates[0],
-      },
+      } as unknown as MetadataService,
     };
 
     // 1. candidates with --json
     let jsonOut = '';
     let jsonErr = '';
-    const jsonCode = await runCli(['candidates', 'movie_matrix_id', '--json'], {
-      stdout: { write: (c) => (jsonOut += c) },
-      stderr: { write: (c) => (jsonErr += c) },
-    }, mockServices as any);
+    const jsonCode = await runCli(
+      ['candidates', 'movie_matrix_id', '--json'],
+      {
+        stdout: { write: (c) => (jsonOut += c) },
+        stderr: { write: (c) => (jsonErr += c) },
+      },
+      mockServices,
+    );
 
     expect(jsonCode).toBe(0);
     expect(jsonErr).toBe('');
@@ -359,10 +364,14 @@ describe('medialoom CLI', () => {
 
     // 2. candidates in human mode
     let humanOut = '';
-    const humanCode = await runCli(['candidates', 'movie_matrix_id'], {
-      stdout: { write: (c) => (humanOut += c) },
-      stderr: { write: () => {} },
-    }, mockServices as any);
+    const humanCode = await runCli(
+      ['candidates', 'movie_matrix_id'],
+      {
+        stdout: { write: (c) => (humanOut += c) },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
 
     expect(humanCode).toBe(0);
     expect(humanOut).toContain('The Matrix (1999)');
@@ -372,10 +381,14 @@ describe('medialoom CLI', () => {
     // 3. candidates with missing item ID
     let missingOut = '';
     let missingErr = '';
-    const missingCode = await runCli(['candidates'], {
-      stdout: { write: (c) => (missingOut += c) },
-      stderr: { write: (c) => (missingErr += c) },
-    }, mockServices as any);
+    const missingCode = await runCli(
+      ['candidates'],
+      {
+        stdout: { write: (c) => (missingOut += c) },
+        stderr: { write: (c) => (missingErr += c) },
+      },
+      mockServices,
+    );
 
     expect(missingCode).toBe(1);
     expect(missingErr).toContain('Missing required <id>');

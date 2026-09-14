@@ -1,11 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
-import {
-  closeDatabaseConnection,
-  defaultSettingsRepository,
-  getPrismaClient,
-  maskApiKey,
-  SettingsRepository,
-} from '../src';
+import { closeDatabaseConnection, getPrismaClient, maskApiKey, SettingsRepository } from '../src';
 
 describe('SettingsRepository', () => {
   const repo = new SettingsRepository();

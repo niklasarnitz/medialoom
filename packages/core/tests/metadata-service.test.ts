@@ -28,7 +28,7 @@ describe('MetadataService', () => {
     },
     getMovie: async (id: string | number) => {
       if (String(id) === '603') {
-        return mockCandidates[0];
+        return mockCandidates[0] ?? null;
       }
       return null;
     },
@@ -70,7 +70,7 @@ describe('MetadataService', () => {
     expect(result.query).toBe('The Matrix');
     expect(result.year).toBe(1999);
     expect(result.candidates.length).toBe(1);
-    expect(result.candidates[0].tmdbId).toBe(603);
+    expect(result.candidates[0]?.tmdbId).toBe(603);
   });
 
   it('throws an error when item is not found in inventory', async () => {
@@ -84,7 +84,7 @@ describe('MetadataService', () => {
     const service = new MetadataService(mockProvider, mockInventoryRepo, mockSettingsRepo);
     const candidates = await service.searchMovies({ query: 'The Matrix', year: 1999 });
     expect(candidates.length).toBe(1);
-    expect(candidates[0].tmdbId).toBe(603);
+    expect(candidates[0]?.tmdbId).toBe(603);
   });
 
   it('retrieves movie details via getMovie', async () => {
