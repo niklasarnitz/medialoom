@@ -260,4 +260,124 @@ describe('medialoom CLI', () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('handles config get and set via CLI in human and --json mode', async () => {
+    // 1. Set key via config set
+    let setOut = '';
+    let setErr = '';
+    const setCode = await runCli(['config', 'set', 'tmdb_api_key', 'test_key_abc12345'], {
+      stdout: { write: (c) => (setOut += c) },
+      stderr: { write: (c) => (setErr += c) },
+    });
+    expect(setCode).toBe(0);
+    expect(setOut).toContain('✓ TMDb API key saved successfully');
+
+    // 2. Get key via config get in human mode
+    let getHumanOut = '';
+    const getHumanCode = await runCli(['config', 'get', 'tmdb_api_key'], {
+      stdout: { write: (c) => (getHumanOut += c) },
+      stderr: { write: () => {} },
+    });
+    expect(getHumanCode).toBe(0);
+    expect(getHumanOut).toContain('test...2345 (configured in SQLite)');
+    expect(getHumanOut).not.toContain('test_key_abc12345'); // Never log full token!
+
+    // 3. Get key via config get --json
+    let getJsonOut = '';
+    const getJsonCode = await runCli(['config', 'get', 'tmdb_api_key', '--json'], {
+      stdout: { write: (c) => (getJsonOut += c) },
+      stderr: { write: () => {} },
+    });
+    expect(getJsonCode).toBe(0);
+    const parsedGet = JSON.parse(getJsonOut);
+    expect(parsedGet.schemaVersion).toBe(1);
+    expect(parsedGet.key).toBe('tmdb_api_key');
+    expect(parsedGet.configured).toBe(true);
+    expect(parsedGet.masked).toBe(true);
+    expect(parsedGet.value).toBe('test...2345');
+  });
+
+  it('handles candidates command for an item in human and --json mode', async () => {
+    // Mock metadataService and inventoryService
+    const mockMovie = {
+      id: 'movie_matrix_id',
+      title: 'The Matrix',
+      year: 1999,
+      status: 'UNMATCHED',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      editions: [],
+    };
+
+    const mockCandidates = [
+      {
+        provider: 'tmdb',
+        providerId: '603',
+        title: 'The Matrix',
+        year: 1999,
+        tmdbId: 603,
+        overview: 'Set in the 22nd century...',
+        posterUrl: 'https://image.tmdb.org/t/p/w500/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg',
+      },
+    ];
+
+    const mockServices = {
+      metadataService: {
+        getCandidatesForItem: async (id: string) => {
+          if (id === 'movie_matrix_id') {
+            return {
+              item: mockMovie,
+              query: 'The Matrix',
+              year: 1999,
+              candidates: mockCandidates,
+            };
+          }
+          throw new Error(`MediaItem "${id}" not found`);
+        },
+        searchMovies: async () => mockCandidates,
+        getMovie: async () => mockCandidates[0],
+      },
+    };
+
+    // 1. candidates with --json
+    let jsonOut = '';
+    let jsonErr = '';
+    const jsonCode = await runCli(['candidates', 'movie_matrix_id', '--json'], {
+      stdout: { write: (c) => (jsonOut += c) },
+      stderr: { write: (c) => (jsonErr += c) },
+    }, mockServices as any);
+
+    expect(jsonCode).toBe(0);
+    expect(jsonErr).toBe('');
+    const parsed = JSON.parse(jsonOut);
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.itemId).toBe('movie_matrix_id');
+    expect(parsed.query).toBe('The Matrix');
+    expect(parsed.year).toBe(1999);
+    expect(parsed.candidates.length).toBe(1);
+    expect(parsed.candidates[0].tmdbId).toBe(603);
+
+    // 2. candidates in human mode
+    let humanOut = '';
+    const humanCode = await runCli(['candidates', 'movie_matrix_id'], {
+      stdout: { write: (c) => (humanOut += c) },
+      stderr: { write: () => {} },
+    }, mockServices as any);
+
+    expect(humanCode).toBe(0);
+    expect(humanOut).toContain('The Matrix (1999)');
+    expect(humanOut).toContain('[TMDB 603]');
+    expect(humanOut).toContain('Candidates (1 found)');
+
+    // 3. candidates with missing item ID
+    let missingOut = '';
+    let missingErr = '';
+    const missingCode = await runCli(['candidates'], {
+      stdout: { write: (c) => (missingOut += c) },
+      stderr: { write: (c) => (missingErr += c) },
+    }, mockServices as any);
+
+    expect(missingCode).toBe(1);
+    expect(missingErr).toContain('Missing required <id>');
+  });
 });

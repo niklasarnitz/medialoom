@@ -1,7 +1,9 @@
 import {
   defaultInventoryService,
+  defaultMetadataService,
   defaultSystemService,
   type InventoryService,
+  type MetadataService,
   type SystemService,
 } from '@medialoom/core';
 
@@ -13,6 +15,7 @@ export interface CliStreams {
 export interface CliServices {
   systemService?: SystemService;
   inventoryService?: InventoryService;
+  metadataService?: MetadataService;
 }
 
 function serializeJson(data: unknown): string {
@@ -47,13 +50,16 @@ export async function runCli(
 
   let systemService: SystemService;
   let inventoryService: InventoryService;
+  let metadataService: MetadataService;
 
   if ('getVersion' in systemOrServices) {
     systemService = systemOrServices;
     inventoryService = inventoryServiceArg ?? defaultInventoryService;
+    metadataService = defaultMetadataService;
   } else {
     systemService = systemOrServices.systemService ?? defaultSystemService;
     inventoryService = systemOrServices.inventoryService ?? defaultInventoryService;
+    metadataService = systemOrServices.metadataService ?? defaultMetadataService;
   }
 
   if (isHelp || (!command && !isVersion)) {
@@ -68,6 +74,9 @@ export async function runCli(
         '  scan <path>         Recursively scan directory and parse media filenames',
         '  items               List media items in the inventory',
         '  inspect <id>        Inspect details and metadata for a media item',
+        '  candidates <id>     Search TMDb for candidate metadata for an item',
+        '  config get [key]    Get configuration setting from database',
+        '  config set <key> <v> Set configuration setting in SQLite database',
         '  doctor              Run environment and system diagnostics',
         '  version             Display MediaLoom version',
         '  help                Show help information',
@@ -302,6 +311,172 @@ export async function runCli(
       }
       return 1;
     }
+  }
+
+  if (command === 'candidates') {
+    const itemId = positional[1];
+    if (!itemId) {
+      if (isJson) {
+        streams.stdout.write(
+          `${serializeJson({ schemaVersion: 1, error: 'Missing required <id> argument for candidates command.' })}\n`,
+        );
+      } else {
+        streams.stderr.write('Error: Missing required <id> argument for candidates command.\n');
+      }
+      return 1;
+    }
+
+    try {
+      const result = await metadataService.getCandidatesForItem(itemId);
+      if (isJson) {
+        streams.stdout.write(
+          `${serializeJson({
+            schemaVersion: 1,
+            itemId: result.item.id,
+            query: result.query,
+            year: result.year,
+            candidates: result.candidates,
+          })}\n`,
+        );
+      } else {
+        const lines: string[] = [
+          `MediaItem: ${result.item.title}${result.year ? ` (${result.year})` : ''} [ID: ${result.item.id}]`,
+          `Query: "${result.query}"${result.year ? ` (Year: ${result.year})` : ''}`,
+          '',
+        ];
+        if (result.candidates.length === 0) {
+          lines.push(`No candidates found for "${result.query}".`);
+        } else {
+          lines.push(`Candidates (${result.candidates.length} found):`);
+          lines.push('');
+          for (let i = 0; i < result.candidates.length; i++) {
+            const c = result.candidates[i];
+            const yearStr = c.year ? ` (${c.year})` : '';
+            lines.push(`  [${i + 1}] [${c.provider.toUpperCase()} ${c.providerId}] ${c.title}${yearStr}`);
+            if (c.overview) {
+              const truncated =
+                c.overview.length > 120 ? `${c.overview.slice(0, 117)}...` : c.overview;
+              lines.push(`      Overview: ${truncated}`);
+            }
+            if (c.posterUrl) {
+              lines.push(`      Poster:   ${c.posterUrl}`);
+            }
+            lines.push('');
+          }
+        }
+        streams.stdout.write(lines.join('\n'));
+      }
+      return 0;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isJson) {
+        streams.stdout.write(`${serializeJson({ schemaVersion: 1, error: message })}\n`);
+      } else {
+        streams.stderr.write(`Candidates error: ${message}\n`);
+      }
+      return 1;
+    }
+  }
+
+  if (command === 'config') {
+    const subCommand = positional[1];
+    const key = positional[2];
+    const value = positional[3];
+
+    if (subCommand === 'get') {
+      const targetKey = key || 'tmdb_api_key';
+      if (
+        targetKey === 'tmdb_api_key' ||
+        targetKey === 'tmdb.api_key' ||
+        targetKey === 'tmdb_token'
+      ) {
+        const info = await systemService.getTmdbApiKeyMasked();
+        if (isJson) {
+          streams.stdout.write(
+            `${serializeJson({
+              schemaVersion: 1,
+              key: 'tmdb_api_key',
+              value: info.maskedKey,
+              masked: true,
+              configured: info.configured,
+            })}\n`,
+          );
+        } else {
+          if (info.configured) {
+            streams.stdout.write(`tmdb_api_key: ${info.maskedKey} (configured in SQLite)\n`);
+          } else {
+            streams.stdout.write('tmdb_api_key: (not configured)\n');
+          }
+        }
+        return 0;
+      }
+
+      if (isJson) {
+        streams.stdout.write(
+          `${serializeJson({ schemaVersion: 1, error: `Unknown config key "${targetKey}"` })}\n`,
+        );
+      } else {
+        streams.stderr.write(`Unknown config key: ${targetKey}\n`);
+      }
+      return 1;
+    }
+
+    if (subCommand === 'set') {
+      if (!key) {
+        if (isJson) {
+          streams.stdout.write(
+            `${serializeJson({ schemaVersion: 1, error: 'Missing required <key> argument for config set.' })}\n`,
+          );
+        } else {
+          streams.stderr.write('Error: Missing required <key> argument for config set.\n');
+        }
+        return 1;
+      }
+      if (value === undefined) {
+        if (isJson) {
+          streams.stdout.write(
+            `${serializeJson({ schemaVersion: 1, error: 'Missing required <value> argument for config set.' })}\n`,
+          );
+        } else {
+          streams.stderr.write('Error: Missing required <value> argument for config set.\n');
+        }
+        return 1;
+      }
+
+      if (key === 'tmdb_api_key' || key === 'tmdb.api_key' || key === 'tmdb_token') {
+        await systemService.setTmdbApiKey(value);
+        const info = await systemService.getTmdbApiKeyMasked();
+        if (isJson) {
+          streams.stdout.write(
+            `${serializeJson({
+              schemaVersion: 1,
+              key: 'tmdb_api_key',
+              value: info.maskedKey,
+              masked: true,
+              configured: info.configured,
+              message: 'TMDb API key saved successfully.',
+            })}\n`,
+          );
+        } else {
+          streams.stdout.write('✓ TMDb API key saved successfully.\n');
+        }
+        return 0;
+      }
+
+      if (isJson) {
+        streams.stdout.write(
+          `${serializeJson({ schemaVersion: 1, error: `Unknown config key "${key}"` })}\n`,
+        );
+      } else {
+        streams.stderr.write(`Unknown config key: ${key}\n`);
+      }
+      return 1;
+    }
+
+    streams.stderr.write(
+      'Usage: medialoom config get [key] | medialoom config set <key> <value>\n',
+    );
+    return 1;
   }
 
   streams.stderr.write(`Unknown command: ${command}. Use --help to view available commands.\n`);
