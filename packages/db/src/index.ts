@@ -11,6 +11,7 @@ export type {
 } from '@prisma/client';
 export * from './client';
 export * from './repositories/inventory-repository';
+export * from './repositories/settings-repository';
 export * from './utils/path';
 
 // Ensure BigInt values from Prisma can be serialized to JSON across the application
