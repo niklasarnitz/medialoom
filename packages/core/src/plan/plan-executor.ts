@@ -1,6 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Operation, OperationPlanDto, ReviewQueueItemDto } from '@medialoom/contracts';
+import type {
+  Operation,
+  OperationExecutionRecord,
+  OperationPlanDto,
+  PlanExecutionResultDto,
+  PlanValidationResult,
+  ReviewQueueItemDto,
+} from '@medialoom/contracts';
 import {
   defaultInventoryRepository,
   defaultPlanRepository,
@@ -12,39 +19,58 @@ import {
   type ReviewRepository,
 } from '@medialoom/db';
 import { ConflictError, DomainError, ReviewNotApprovedError, ReviewNotFoundError } from '../errors';
+import { defaultPlanValidator, type PlanValidator } from './plan-validator';
 
 export interface PlanExecutorOptions {
   planRepo?: PlanRepository;
   reviewRepo?: ReviewRepository;
   inventoryRepo?: InventoryRepository;
+  validator?: PlanValidator;
 }
 
-export interface PlanExecutionResult {
-  plan: OperationPlanDto;
-  reviewItem: ReviewQueueItemDto;
-  executedOperations: number;
+export interface ExecutePlanOptions {
+  dryRun?: boolean;
 }
+
+export type PlanExecutionResult = PlanExecutionResultDto;
 
 export class PlanExecutor {
   private planRepo: PlanRepository;
   private reviewRepo: ReviewRepository;
   private inventoryRepo: InventoryRepository;
+  private validator: PlanValidator;
 
   constructor(options: PlanExecutorOptions = {}) {
     this.planRepo = options.planRepo ?? defaultPlanRepository;
     this.reviewRepo = options.reviewRepo ?? defaultReviewRepository;
     this.inventoryRepo = options.inventoryRepo ?? defaultInventoryRepository;
+    this.validator = options.validator ?? defaultPlanValidator;
   }
 
-  async executeReviewItem(reviewItemId: string): Promise<PlanExecutionResult> {
+  async applyApprovedReviewItem(
+    reviewItemId: string,
+    options: ExecutePlanOptions = {},
+  ): Promise<PlanExecutionResult> {
     const reviewItem = await this.reviewRepo.getReviewItem(reviewItemId);
     if (!reviewItem) {
       throw new ReviewNotFoundError(reviewItemId);
     }
-    return this.executePlan(reviewItem.operationPlanId);
+    return this.executePlan(reviewItem.operationPlanId, options);
   }
 
-  async executePlan(planId: string): Promise<PlanExecutionResult> {
+  async executeReviewItem(
+    reviewItemId: string,
+    options: ExecutePlanOptions = {},
+  ): Promise<PlanExecutionResult> {
+    return this.applyApprovedReviewItem(reviewItemId, options);
+  }
+
+  async executePlan(
+    planId: string,
+    options: ExecutePlanOptions = {},
+  ): Promise<PlanExecutionResult> {
+    const isDryRun = options.dryRun === true;
+
     const planRecord = await this.planRepo.getPlan(planId);
     if (!planRecord) {
       throw new DomainError(`OperationPlan "${planId}" not found.`, {
@@ -62,18 +88,32 @@ export class PlanExecutor {
       );
     }
 
-    if (reviewRecord.status !== 'APPROVED') {
+    if (planRecord.status === 'APPLIED') {
+      throw new ConflictError(`OperationPlan "${planId}" has already been applied.`, {
+        planId,
+        reviewId: reviewRecord.id,
+      });
+    }
+
+    if (reviewRecord.status === 'REJECTED') {
+      throw new ReviewNotApprovedError(
+        `OperationPlan "${planId}" cannot be executed because ReviewQueueItem "${reviewRecord.id}" was REJECTED.`,
+        { planId, reviewId: reviewRecord.id, status: reviewRecord.status },
+      );
+    }
+
+    if (!isDryRun && reviewRecord.status !== 'APPROVED') {
       throw new ReviewNotApprovedError(
         `OperationPlan "${planId}" cannot be executed because ReviewQueueItem "${reviewRecord.id}" is in status "${reviewRecord.status}" (must be "APPROVED").`,
         { planId, reviewId: reviewRecord.id, status: reviewRecord.status },
       );
     }
 
-    if (planRecord.status === 'APPLIED') {
-      throw new ConflictError(`OperationPlan "${planId}" has already been applied.`, {
-        planId,
-        reviewId: reviewRecord.id,
-      });
+    if (isDryRun && reviewRecord.status !== 'APPROVED' && reviewRecord.status !== 'PENDING') {
+      throw new ReviewNotApprovedError(
+        `Cannot dry run OperationPlan "${planId}" because ReviewQueueItem is in status "${reviewRecord.status}".`,
+        { planId, reviewId: reviewRecord.id, status: reviewRecord.status },
+      );
     }
 
     if (planRecord.status === 'FAILED') {
@@ -85,100 +125,221 @@ export class PlanExecutor {
 
     const operations: Operation[] = JSON.parse(planRecord.operationsJson);
 
-    // Pre-execution filesystem safety check
-    this.preCheckOperations(operations);
+    // Live filesystem revalidation
+    const liveValidation = await this.validator.validate({
+      operations,
+      destinationRoot: planRecord.destinationRoot,
+    });
 
-    // Perform execution
-    try {
-      await this.applyOperations(operations);
+    if (!liveValidation.valid) {
+      const errorSummary = liveValidation.issues
+        .filter((i) => i.severity === 'error')
+        .map((i) => `[${i.code}] ${i.message}`)
+        .join('; ');
 
-      const now = new Date();
-      const updatedPlan = await this.planRepo.updatePlan(planId, {
-        status: 'APPLIED',
-        appliedAt: now,
-      });
+      if (!isDryRun) {
+        // Mark both plan and review item as failed
+        await this.planRepo.updatePlan(planId, {
+          status: 'FAILED',
+          failureReason: `Filesystem revalidation failed before execution: ${errorSummary}`,
+          validationJson: JSON.stringify(liveValidation),
+        });
+        await this.reviewRepo.updateReviewItem(reviewRecord.id, {
+          status: 'FAILED',
+        });
 
-      const updatedReview = await this.reviewRepo.updateReviewItem(reviewRecord.id, {
-        status: 'APPLIED',
-      });
+        throw new ConflictError(
+          `Execution aborted: reality changed on disk or conflicts appeared since plan was generated: ${errorSummary}`,
+          { planId, reviewId: reviewRecord.id, validation: liveValidation },
+        );
+      }
 
-      const planDto = this.deserializePlan(updatedPlan);
-      const reviewDto = this.deserializeReviewItem(updatedReview, planDto);
+      // In dry-run mode, return validation report without failing stored records
+      const planDto = this.deserializePlan(planRecord);
+      const reviewDto = this.deserializeReviewItem(reviewRecord, planDto);
+      return {
+        plan: planDto,
+        reviewItem: reviewDto,
+        dryRun: true,
+        executedOperations: 0,
+        operationResults: [],
+        validation: liveValidation,
+        message: `Dry run validation failed: ${errorSummary}`,
+      };
+    }
+
+    if (isDryRun) {
+      const planDto = this.deserializePlan(planRecord);
+      const reviewDto = this.deserializeReviewItem(reviewRecord, planDto);
+      const simulatedResults: OperationExecutionRecord[] = operations.map((op, idx) => ({
+        index: idx,
+        type: op.type,
+        path: 'path' in op ? op.path : undefined,
+        source: 'source' in op ? op.source : undefined,
+        destination: 'destination' in op ? op.destination : undefined,
+        status: 'succeeded',
+        executedAt: new Date(),
+      }));
 
       return {
         plan: planDto,
         reviewItem: reviewDto,
+        dryRun: true,
         executedOperations: operations.length,
+        operationResults: simulatedResults,
+        validation: liveValidation,
+        message: 'Dry run completed successfully. No filesystem changes were made.',
       };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await this.planRepo.updatePlan(planId, {
-        status: 'FAILED',
-        failureReason: `Execution error: ${message}`,
-      });
-      await this.reviewRepo.updateReviewItem(reviewRecord.id, {
-        status: 'FAILED',
-      });
-      throw err;
     }
-  }
 
-  private preCheckOperations(operations: Operation[]): void {
-    for (const op of operations) {
-      if (op.type === 'move') {
-        if (!fs.existsSync(op.source)) {
-          throw new ConflictError(`Execution aborted: source file does not exist: "${op.source}"`, {
-            source: op.source,
-            destination: op.destination,
+    // Live real execution
+    const executionRecords: OperationExecutionRecord[] = [];
+
+    for (let i = 0; i < operations.length; i++) {
+      const op = operations[i];
+      if (!op) continue;
+
+      const record: OperationExecutionRecord = {
+        index: i,
+        type: op.type,
+        path: 'path' in op ? op.path : undefined,
+        source: 'source' in op ? op.source : undefined,
+        destination: 'destination' in op ? op.destination : undefined,
+        status: 'succeeded',
+        executedAt: new Date(),
+      };
+
+      try {
+        if (op.type === 'mkdir') {
+          fs.mkdirSync(op.path, { recursive: true });
+        } else if (op.type === 'move') {
+          if (op.source === op.destination) {
+            // No-op
+            executionRecords.push(record);
+            continue;
+          }
+
+          // Safety checks immediately before move
+          if (!fs.existsSync(op.source)) {
+            throw new Error(`Source file missing: "${op.source}"`);
+          }
+          if (fs.existsSync(op.destination)) {
+            throw new Error(`Destination already exists: "${op.destination}"`);
+          }
+
+          const targetDir = path.dirname(op.destination);
+          fs.mkdirSync(targetDir, { recursive: true });
+
+          try {
+            fs.renameSync(op.source, op.destination);
+          } catch (err: unknown) {
+            const renameErr = err as NodeJS.ErrnoException;
+            if (renameErr && renameErr.code === 'EXDEV') {
+              // Cross-device fallback: copy -> verify size -> unlink
+              fs.copyFileSync(op.source, op.destination);
+
+              const srcStat = fs.statSync(op.source);
+              const dstStat = fs.statSync(op.destination);
+
+              if (srcStat.size !== dstStat.size) {
+                // Remove incomplete destination file
+                try {
+                  fs.unlinkSync(op.destination);
+                } catch {}
+                throw new Error(
+                  `Cross-device copy size verification failed: source size ${srcStat.size} !== destination size ${dstStat.size}`,
+                );
+              }
+
+              // Unlink source only after successful copy & verification
+              fs.unlinkSync(op.source);
+            } else {
+              throw err;
+            }
+          }
+
+          // Update asset path in inventory DB
+          await this.inventoryRepo.updateAssetPath(op.source, op.destination).catch(() => {});
+        } else if (op.type === 'writeText') {
+          const targetDir = path.dirname(op.path);
+          fs.mkdirSync(targetDir, { recursive: true });
+          fs.writeFileSync(op.path, op.content, 'utf8');
+        }
+
+        executionRecords.push(record);
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        record.status = 'failed';
+        record.error = errorMsg;
+        executionRecords.push(record);
+
+        // Mark remaining operations as skipped
+        for (let j = i + 1; j < operations.length; j++) {
+          const remainingOp = operations[j];
+          if (!remainingOp) continue;
+          executionRecords.push({
+            index: j,
+            type: remainingOp.type,
+            path: 'path' in remainingOp ? remainingOp.path : undefined,
+            source: 'source' in remainingOp ? remainingOp.source : undefined,
+            destination: 'destination' in remainingOp ? remainingOp.destination : undefined,
+            status: 'skipped',
           });
         }
-        if (op.source !== op.destination && fs.existsSync(op.destination)) {
-          throw new ConflictError(
-            `Execution aborted: destination already exists: "${op.destination}"`,
-            { source: op.source, destination: op.destination },
-          );
-        }
+
+        // Update plan and review item to FAILED
+        await this.planRepo.updatePlan(planId, {
+          status: 'FAILED',
+          failureReason: `Execution failed at operation #${i + 1} (${op.type}): ${errorMsg}`,
+        });
+        await this.reviewRepo.updateReviewItem(reviewRecord.id, {
+          status: 'FAILED',
+        });
+
+        throw new ConflictError(
+          `Execution partially failed at operation #${i + 1} (${op.type}): ${errorMsg}. ${i} operations completed before failure.`,
+          {
+            planId,
+            reviewId: reviewRecord.id,
+            failedOperationIndex: i,
+            executedOperations: i,
+            operationResults: executionRecords,
+          },
+        );
       }
     }
-  }
 
-  private async applyOperations(operations: Operation[]): Promise<void> {
-    for (const op of operations) {
-      if (op.type === 'mkdir') {
-        fs.mkdirSync(op.path, { recursive: true });
-      } else if (op.type === 'move') {
-        if (op.source === op.destination) {
-          continue;
-        }
-        const targetDir = path.dirname(op.destination);
-        fs.mkdirSync(targetDir, { recursive: true });
+    const now = new Date();
+    const updatedPlan = await this.planRepo.updatePlan(planId, {
+      status: 'APPLIED',
+      appliedAt: now,
+      validatedAt: now,
+      validationJson: JSON.stringify(liveValidation),
+    });
 
-        // Safe cross-device move fallback
-        try {
-          fs.renameSync(op.source, op.destination);
-        } catch (err: unknown) {
-          const renameErr = err as NodeJS.ErrnoException;
-          if (renameErr && renameErr.code === 'EXDEV') {
-            fs.copyFileSync(op.source, op.destination);
-            fs.unlinkSync(op.source);
-          } else {
-            throw err;
-          }
-        }
+    const updatedReview = await this.reviewRepo.updateReviewItem(reviewRecord.id, {
+      status: 'APPLIED',
+    });
 
-        // Update database Asset path if corresponding asset exists
-        await this.inventoryRepo.updateAssetPath(op.source, op.destination).catch(() => {});
-      } else if (op.type === 'writeText') {
-        const targetDir = path.dirname(op.path);
-        fs.mkdirSync(targetDir, { recursive: true });
-        fs.writeFileSync(op.path, op.content, 'utf8');
-      }
-    }
+    const planDto = this.deserializePlan(updatedPlan);
+    const reviewDto = this.deserializeReviewItem(updatedReview, planDto);
+
+    return {
+      plan: planDto,
+      reviewItem: reviewDto,
+      dryRun: false,
+      executedOperations: operations.length,
+      operationResults: executionRecords,
+      validation: liveValidation,
+      message: 'Plan executed successfully.',
+    };
   }
 
   private deserializePlan(record: OperationPlan): OperationPlanDto {
     const operations: Operation[] = JSON.parse(record.operationsJson);
-    const validation = record.validationJson ? JSON.parse(record.validationJson) : null;
+    const validation: PlanValidationResult | null = record.validationJson
+      ? JSON.parse(record.validationJson)
+      : null;
     return {
       id: record.id,
       mediaItemId: record.mediaItemId,

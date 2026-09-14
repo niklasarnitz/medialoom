@@ -14,7 +14,11 @@ import {
 } from './metadata';
 import { operationPlanDtoSchema } from './plan';
 import { layoutDataSchema } from './profile';
-import { reviewActionResponseSchema, reviewQueueItemDtoSchema } from './review';
+import {
+  planExecutionResultDtoSchema,
+  reviewActionResponseSchema,
+  reviewQueueItemDtoSchema,
+} from './review';
 import { doctorReportEnvelopeSchema, systemHealthSchema } from './system';
 
 // ============================================================================
@@ -201,6 +205,9 @@ export type ReviewListData = z.infer<typeof reviewListDataSchema>;
 export const reviewActionDataSchema = reviewActionResponseSchema;
 export type ReviewActionData = z.infer<typeof reviewActionDataSchema>;
 
+export const applyReviewDataSchema = planExecutionResultDtoSchema;
+export type ApplyReviewData = z.infer<typeof applyReviewDataSchema>;
+
 // Typed Envelopes
 export const scanApiEnvelopeSchema = apiSuccessEnvelopeSchema(scanDataSchema);
 export const itemsApiEnvelopeSchema = apiSuccessEnvelopeSchema(itemsDataSchema);
@@ -215,3 +222,4 @@ export const plansApiEnvelopeSchema = apiSuccessEnvelopeSchema(plansDataSchema);
 export const reviewItemApiEnvelopeSchema = apiSuccessEnvelopeSchema(reviewItemDataSchema);
 export const reviewListApiEnvelopeSchema = apiSuccessEnvelopeSchema(reviewListDataSchema);
 export const reviewActionApiEnvelopeSchema = apiSuccessEnvelopeSchema(reviewActionDataSchema);
+export const applyReviewApiEnvelopeSchema = apiSuccessEnvelopeSchema(applyReviewDataSchema);

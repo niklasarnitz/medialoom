@@ -74,25 +74,59 @@ describe('medialoom review CLI commands', () => {
   } as unknown as ReviewService;
 
   const mockPlanExecutor = {
-    executeReviewItem: async (id: string) => {
+    applyApprovedReviewItem: async (id: string, options: { dryRun?: boolean } = {}) => {
       if (id !== 'rev_123') throw new Error('Not found');
+      const isDryRun = options.dryRun === true;
       return {
         plan: {
           id: 'plan_123',
           mediaItemId: 'movie_123',
           profile: 'jellyfin',
           destinationRoot: '/movies',
-          status: 'APPLIED' as const,
-          operations: [],
+          status: isDryRun ? ('VALIDATED' as const) : ('APPLIED' as const),
+          operations: [
+            {
+              type: 'mkdir' as const,
+              path: '/movies/Blade Runner (1982)',
+            },
+            {
+              type: 'move' as const,
+              source: '/in/br.mkv',
+              destination: '/movies/Blade Runner (1982)/Blade Runner (1982).mkv',
+            },
+          ],
           createdAt: new Date(),
-          appliedAt: new Date(),
+          appliedAt: isDryRun ? null : new Date(),
         } as OperationPlanDto,
         reviewItem: {
           ...mockReviewItem,
-          status: 'APPLIED' as const,
+          status: isDryRun ? ('PENDING' as const) : ('APPLIED' as const),
         },
+        dryRun: isDryRun,
         executedOperations: 2,
+        operationResults: [
+          {
+            index: 0,
+            type: 'mkdir' as const,
+            path: '/movies/Blade Runner (1982)',
+            status: 'succeeded' as const,
+            executedAt: new Date(),
+          },
+          {
+            index: 1,
+            type: 'move' as const,
+            source: '/in/br.mkv',
+            destination: '/movies/Blade Runner (1982)/Blade Runner (1982).mkv',
+            status: 'succeeded' as const,
+            executedAt: new Date(),
+          },
+        ],
+        validation: { valid: true, issues: [] },
+        message: isDryRun ? 'Dry run completed successfully.' : 'Plan executed successfully.',
       };
+    },
+    executeReviewItem: async (id: string, options: { dryRun?: boolean } = {}) => {
+      return mockPlanExecutor.applyApprovedReviewItem(id, options);
     },
   } as unknown as PlanExecutor;
 
@@ -284,6 +318,7 @@ describe('medialoom review CLI commands', () => {
 
     expect(code).toBe(ExitCode.SUCCESS);
     expect(stdout).toContain('applied successfully');
+    expect(stdout).toContain('Executed operations:');
 
     let jsonStdout = '';
     const jsonCode = await runCli(
@@ -303,5 +338,62 @@ describe('medialoom review CLI commands', () => {
     const parsed = JSON.parse(jsonStdout);
     expect(parsed.status).toBe('success');
     expect(parsed.data.plan.status).toBe('APPLIED');
+  });
+
+  it('handles "medialoom review apply <id> --dry-run"', async () => {
+    let stdout = '';
+    const code = await runCli(
+      ['review', 'apply', 'rev_123', '--dry-run'],
+      {
+        stdout: {
+          write: (c) => {
+            stdout += c;
+          },
+        },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
+
+    expect(code).toBe(ExitCode.SUCCESS);
+    expect(stdout).toContain('DRY RUN');
+    expect(stdout).toContain('Planned operations:');
+    expect(stdout).toContain('No filesystem changes or database updates were made.');
+  });
+
+  it('handles "medialoom apply <id>" alias with and without --dry-run', async () => {
+    let stdout = '';
+    const code = await runCli(
+      ['apply', 'rev_123', '--dry-run'],
+      {
+        stdout: {
+          write: (c) => {
+            stdout += c;
+          },
+        },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
+
+    expect(code).toBe(ExitCode.SUCCESS);
+    expect(stdout).toContain('DRY RUN');
+
+    let applyStdout = '';
+    const applyCode = await runCli(
+      ['apply', 'rev_123'],
+      {
+        stdout: {
+          write: (c) => {
+            applyStdout += c;
+          },
+        },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
+
+    expect(applyCode).toBe(ExitCode.SUCCESS);
+    expect(applyStdout).toContain('applied successfully');
   });
 });

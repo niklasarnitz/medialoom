@@ -184,6 +184,7 @@ export async function runCli(
         '  review approve <id> Explicitly approve a proposed filesystem change',
         '  review reject <id>  Reject a proposed filesystem change without modifying files',
         '  review apply <id>   Execute an approved filesystem change plan',
+        '  apply <id>          Execute an approved filesystem change plan (alias: review apply)',
         '  edition-set <id>    Assign or override edition for a media version (--name <name>)',
         '  edition-reviews     List all editions requiring user review',
         '  config get [key]    Get configuration setting from database',
@@ -197,6 +198,7 @@ export async function runCli(
         '  --help, -h          Show help information',
         '  --version, -v       Display MediaLoom version',
         '  --json              Output machine-readable JSON envelope',
+        '  --dry-run, -n       Simulate plan execution without modifying files or database',
         '  --no-input          Disable interactive prompts',
         '  --provider <p>      Metadata provider for matching (default: tmdb)',
         '  --id <id>           Provider movie ID for manual match override',
@@ -1057,6 +1059,7 @@ export async function runCli(
   }
 
   if (
+    command === 'apply' ||
     command === 'review' ||
     command === 'review-list' ||
     command === 'review-show' ||
@@ -1067,7 +1070,10 @@ export async function runCli(
     let subCommand = positional[1];
     let targetReviewId = positional[2];
 
-    if (command === 'review-list') {
+    if (command === 'apply') {
+      subCommand = 'apply';
+      targetReviewId = positional[1];
+    } else if (command === 'review-list') {
       subCommand = 'list';
       targetReviewId = positional[1];
     } else if (command === 'review-show') {
@@ -1313,37 +1319,67 @@ export async function runCli(
     }
 
     if (subCommand === 'apply') {
+      const applyCmd = command === 'apply' ? 'apply' : 'review apply';
+      const isDryRun = flags.has('--dry-run') || flags.has('-n');
+
       if (!targetReviewId) {
         emitError(
-          'review apply',
+          applyCmd,
           {
             code: ErrorCode.INVALID_ARGUMENT,
-            message: 'Missing required <id> argument for review apply command.',
+            message: `Missing required <id> argument for ${applyCmd} command.`,
           },
-          'Error: Missing required <id> argument for review apply command.',
+          `Error: Missing required <id> argument for ${applyCmd} command.`,
         );
         return ExitCode.INVALID_INPUT;
       }
 
       try {
-        const result = await planExecutor.executeReviewItem(targetReviewId);
+        const result = await planExecutor.applyApprovedReviewItem(targetReviewId, {
+          dryRun: isDryRun,
+        });
 
         if (isJson) {
-          emitSuccess('review apply', {
-            plan: result.plan,
-            reviewItem: result.reviewItem,
-            executedOperations: result.executedOperations,
-          });
+          emitSuccess(applyCmd, result);
+        } else if (result.dryRun) {
+          streams.stdout.write(
+            `[DRY RUN] Review item "${targetReviewId}" simulated successfully (${result.executedOperations} operations planned).\n`,
+          );
+          if (result.plan.operations.length > 0) {
+            streams.stdout.write('Planned operations:\n');
+            for (const op of result.plan.operations) {
+              if (op.type === 'mkdir') {
+                streams.stdout.write(`  [mkdir] ${op.path}\n`);
+              } else if (op.type === 'move') {
+                streams.stdout.write(`  [move] ${op.source} -> ${op.destination}\n`);
+              } else if (op.type === 'writeText') {
+                streams.stdout.write(`  [writeText] ${op.path}\n`);
+              }
+            }
+          }
+          streams.stdout.write('No filesystem changes or database updates were made.\n');
         } else {
           streams.stdout.write(
             `✓ Review item "${targetReviewId}" applied successfully (${result.executedOperations} operations executed).\n`,
           );
+          if (result.operationResults.length > 0) {
+            streams.stdout.write('Executed operations:\n');
+            for (const op of result.operationResults) {
+              if (op.type === 'mkdir') {
+                streams.stdout.write(`  ✓ [mkdir] ${op.path}\n`);
+              } else if (op.type === 'move') {
+                streams.stdout.write(`  ✓ [move] ${op.source} -> ${op.destination}\n`);
+              } else if (op.type === 'writeText') {
+                streams.stdout.write(`  ✓ [writeText] ${op.path}\n`);
+              }
+            }
+          }
         }
         return ExitCode.SUCCESS;
       } catch (err) {
         const mapped = mapErrorToStructured(err);
         emitError(
-          'review apply',
+          applyCmd,
           { code: mapped.code, message: mapped.message, details: mapped.details },
           `Review apply error: ${mapped.message}`,
         );

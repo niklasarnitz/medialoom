@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   apiErrorEnvelopeSchema,
+  applyReviewApiEnvelopeSchema,
   reviewActionApiEnvelopeSchema,
   reviewItemApiEnvelopeSchema,
   reviewListApiEnvelopeSchema,
@@ -159,6 +160,27 @@ describe('Review HTTP API Routes (/api/v1/review)', () => {
     expect(validated.error.code).toBe('REVIEW_NOT_APPROVED');
   });
 
+  it('POST /api/v1/review/:id/apply with dryRun=true succeeds even on pending item', async () => {
+    const handler = getRouteHandler(ReviewApplyRoute, 'POST');
+    const request = new Request(
+      `http://localhost:3000/api/v1/review/${createdReviewId}/apply?dryRun=true`,
+      {
+        method: 'POST',
+      },
+    );
+    const response = await handler({
+      request,
+      params: { id: createdReviewId },
+    });
+
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    const validated = applyReviewApiEnvelopeSchema.parse(json);
+    expect(validated.status).toBe('success');
+    expect(validated.data.dryRun).toBe(true);
+    expect(validated.data.reviewItem.status).toBe('PENDING');
+  });
+
   it('POST /api/v1/review/:id/approve approves review item', async () => {
     const handler = getRouteHandler(ReviewApproveRoute, 'POST');
     const request = new Request(`http://localhost:3000/api/v1/review/${createdReviewId}/approve`, {
@@ -191,9 +213,30 @@ describe('Review HTTP API Routes (/api/v1/review)', () => {
 
     expect(response.status).toBe(200);
     const json = await response.json();
-    expect(json.status).toBe('success');
-    expect(json.data.plan.status).toBe('APPLIED');
-    expect(json.data.reviewItem.status).toBe('APPLIED');
+    const validated = applyReviewApiEnvelopeSchema.parse(json);
+    expect(validated.status).toBe('success');
+    expect(validated.data.dryRun).toBe(false);
+    expect(validated.data.plan.status).toBe('APPLIED');
+    expect(validated.data.reviewItem.status).toBe('APPLIED');
+    expect(validated.data.executedOperations).toBeGreaterThan(0);
+    expect(validated.data.operationResults.length).toBeGreaterThan(0);
+  });
+
+  it('POST /api/v1/review/:id/apply fails with 409 if already applied', async () => {
+    const handler = getRouteHandler(ReviewApplyRoute, 'POST');
+    const request = new Request(`http://localhost:3000/api/v1/review/${createdReviewId}/apply`, {
+      method: 'POST',
+    });
+    const response = await handler({
+      request,
+      params: { id: createdReviewId },
+    });
+
+    expect(response.status).toBe(409);
+    const json = await response.json();
+    const validated = apiErrorEnvelopeSchema.parse(json);
+    expect(validated.status).toBe('error');
+    expect(validated.error.code).toBe('CONFLICT');
   });
 
   it('POST /api/v1/review/:id/reject rejects a review item', async () => {

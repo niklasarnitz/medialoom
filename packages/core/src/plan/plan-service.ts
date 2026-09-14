@@ -18,7 +18,7 @@ import {
   type ReviewRepository,
 } from '@medialoom/db';
 import { DomainError, ItemNotFoundError } from '../errors';
-import { ReviewService, defaultReviewService } from '../review/review-service';
+import { defaultReviewService, ReviewService } from '../review/review-service';
 import { defaultPlanGenerator, type PlanGenerator } from './plan-generator';
 import { defaultPlanValidator, type PlanValidator } from './plan-validator';
 

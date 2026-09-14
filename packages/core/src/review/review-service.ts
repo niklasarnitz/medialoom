@@ -26,22 +26,31 @@ import {
   type ReviewRepository,
 } from '@medialoom/db';
 import { ConflictError, ReviewNotFoundError } from '../errors';
+import {
+  defaultPlanExecutor,
+  type ExecutePlanOptions,
+  type PlanExecutionResult,
+  type PlanExecutor,
+} from '../plan/plan-executor';
 
 export interface ReviewServiceOptions {
   reviewRepo?: ReviewRepository;
   planRepo?: PlanRepository;
   inventoryRepo?: InventoryRepository;
+  planExecutor?: PlanExecutor;
 }
 
 export class ReviewService {
   private reviewRepo: ReviewRepository;
   private planRepo: PlanRepository;
   private inventoryRepo: InventoryRepository;
+  private planExecutor: PlanExecutor;
 
   constructor(options: ReviewServiceOptions = {}) {
     this.reviewRepo = options.reviewRepo ?? defaultReviewRepository;
     this.planRepo = options.planRepo ?? defaultPlanRepository;
     this.inventoryRepo = options.inventoryRepo ?? defaultInventoryRepository;
+    this.planExecutor = options.planExecutor ?? defaultPlanExecutor;
   }
 
   async createReviewItemForPlan(
@@ -221,6 +230,13 @@ export class ReviewService {
     const details = updated.detailsJson ? JSON.parse(updated.detailsJson) : null;
 
     return this.mapToDto(updated, details, plan);
+  }
+
+  async applyApprovedReviewItem(
+    id: string,
+    options: ExecutePlanOptions = {},
+  ): Promise<PlanExecutionResult> {
+    return this.planExecutor.applyApprovedReviewItem(id, options);
   }
 
   private buildSummaryString(params: {

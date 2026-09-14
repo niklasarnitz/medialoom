@@ -93,6 +93,36 @@ export const reviewQueueItemDtoSchema = z.object({
 export type ReviewQueueItemDto = z.infer<typeof reviewQueueItemDtoSchema>;
 
 // ============================================================================
+// Per-Operation Execution Record & Plan Execution Result
+// ============================================================================
+
+export const operationExecutionStatusSchema = z.enum(['succeeded', 'failed', 'skipped']);
+export type OperationExecutionStatus = z.infer<typeof operationExecutionStatusSchema>;
+
+export const operationExecutionRecordSchema = z.object({
+  index: z.number().int().nonnegative(),
+  type: z.enum(['mkdir', 'move', 'writeText']),
+  path: z.string().optional(),
+  source: z.string().optional(),
+  destination: z.string().optional(),
+  status: operationExecutionStatusSchema,
+  error: z.string().optional(),
+  executedAt: z.coerce.date().optional(),
+});
+export type OperationExecutionRecord = z.infer<typeof operationExecutionRecordSchema>;
+
+export const planExecutionResultDtoSchema = z.object({
+  plan: operationPlanDtoSchema,
+  reviewItem: reviewQueueItemDtoSchema,
+  dryRun: z.boolean().default(false),
+  executedOperations: z.number().int().nonnegative(),
+  operationResults: z.array(operationExecutionRecordSchema).default([]),
+  validation: planValidationResultSchema.nullable().optional(),
+  message: z.string().optional(),
+});
+export type PlanExecutionResultDto = z.infer<typeof planExecutionResultDtoSchema>;
+
+// ============================================================================
 // Query & Request Schemas
 // ============================================================================
 
@@ -105,6 +135,11 @@ export const listReviewQuerySchema = z.object({
   offset: z.coerce.number().int().nonnegative().optional(),
 });
 export type ListReviewQuery = z.infer<typeof listReviewQuerySchema>;
+
+export const applyReviewRequestSchema = z.object({
+  dryRun: z.boolean().optional().default(false),
+});
+export type ApplyReviewRequest = z.infer<typeof applyReviewRequestSchema>;
 
 export const reviewActionResponseSchema = z.object({
   item: reviewQueueItemDtoSchema,

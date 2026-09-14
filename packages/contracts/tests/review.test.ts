@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  operationExecutionRecordSchema,
+  planExecutionResultDtoSchema,
   reviewItemDetailsSchema,
   reviewItemStatusSchema,
   reviewItemTypeSchema,
@@ -100,5 +102,48 @@ describe('Review Domain Contracts', () => {
     expect(parsed.status).toBe('PENDING');
     expect(parsed.type).toBe('FILESYSTEM_CHANGE');
     expect(parsed.details?.affectedMovie?.title).toBe('Blade Runner');
+  });
+
+  it('validates operationExecutionRecordSchema and planExecutionResultDtoSchema', () => {
+    const record = {
+      index: 0,
+      type: 'move' as const,
+      source: '/in/movie.mkv',
+      destination: '/out/movie.mkv',
+      status: 'succeeded' as const,
+      executedAt: new Date(),
+    };
+    const parsedRecord = operationExecutionRecordSchema.parse(record);
+    expect(parsedRecord.status).toBe('succeeded');
+    expect(parsedRecord.index).toBe(0);
+
+    const result = {
+      plan: {
+        id: 'plan_1',
+        mediaItemId: 'movie_1',
+        profile: 'jellyfin',
+        destinationRoot: '/movies',
+        status: 'APPLIED' as const,
+        operations: [],
+        createdAt: new Date(),
+        appliedAt: new Date(),
+      },
+      reviewItem: {
+        id: 'rev_1',
+        type: 'FILESYSTEM_CHANGE' as const,
+        status: 'APPLIED' as const,
+        operationPlanId: 'plan_1',
+        title: 'Reorganize test',
+        summary: 'Summary test',
+        createdAt: new Date(),
+      },
+      dryRun: false,
+      executedOperations: 1,
+      operationResults: [parsedRecord],
+    };
+    const parsedResult = planExecutionResultDtoSchema.parse(result);
+    expect(parsedResult.executedOperations).toBe(1);
+    expect(parsedResult.dryRun).toBe(false);
+    expect(parsedResult.operationResults).toHaveLength(1);
   });
 });
