@@ -5,6 +5,7 @@ import {
   defaultMatchingService,
   defaultMetadataService,
   defaultMovieMatcher,
+  defaultPlanService,
   defaultSystemService,
   extractLocalMovieMetadata,
   type InventoryService,
@@ -12,6 +13,7 @@ import {
   type MatchingService,
   type MetadataService,
   mapErrorToStructured,
+  type PlanService,
   type SystemService,
 } from '@medialoom/core';
 
@@ -26,6 +28,7 @@ export interface CliServices {
   metadataService?: MetadataService;
   matchingService?: MatchingService;
   layoutService?: LayoutService;
+  planService?: PlanService;
 }
 
 function serializeJson(data: unknown): string {
@@ -86,6 +89,7 @@ export async function runCli(
   let metadataService: MetadataService;
   let matchingService: MatchingService;
   let layoutService: LayoutService;
+  let planService: PlanService;
 
   if ('getVersion' in systemOrServices) {
     systemService = systemOrServices;
@@ -93,12 +97,14 @@ export async function runCli(
     metadataService = defaultMetadataService;
     matchingService = defaultMatchingService;
     layoutService = defaultLayoutService;
+    planService = defaultPlanService;
   } else {
     systemService = systemOrServices.systemService ?? defaultSystemService;
     inventoryService = systemOrServices.inventoryService ?? defaultInventoryService;
     metadataService = systemOrServices.metadataService ?? defaultMetadataService;
     matchingService = systemOrServices.matchingService ?? defaultMatchingService;
     layoutService = systemOrServices.layoutService ?? defaultLayoutService;
+    planService = systemOrServices.planService ?? defaultPlanService;
   }
 
   function emitSuccess(commandName: string, data: unknown): void {
@@ -148,11 +154,15 @@ export async function runCli(
         '  candidates <id>     Search TMDb for candidate metadata for an item',
         '  match <id>          Match item to provider (supports --provider <p> --id <id>)',
         '  layout <id>         Calculate output layout plan (supports --profile <p> --destination <d>)',
+        '  plan <id>           Generate, validate, and persist OperationPlan',
+        '  plans               List persisted OperationPlans',
+        '  plan-show <id>      Inspect details of a persisted OperationPlan',
         '  config get [key]    Get configuration setting from database',
         '  config set <key> <v> Set configuration setting in SQLite database',
         '  doctor              Run environment and system diagnostics',
         '  version             Display MediaLoom version',
         '  help                Show help information',
+
         '',
         'Options:',
         '  --help, -h          Show help information',
@@ -777,6 +787,219 @@ export async function runCli(
         'layout',
         { code: mapped.code, message: mapped.message, details: mapped.details },
         `Layout error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
+    }
+  }
+
+  if (command === 'plan') {
+    const itemId = positional[1];
+    if (!itemId) {
+      emitError(
+        'plan',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required <id> argument for plan command.',
+        },
+        'Error: Missing required <id> argument for plan command.',
+      );
+      return ExitCode.INVALID_INPUT;
+    }
+
+    if (!destinationFlag) {
+      emitError(
+        'plan',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required --destination <path> argument for plan command.',
+        },
+        'Error: Missing required --destination <path> argument for plan command.',
+      );
+      return ExitCode.INVALID_INPUT;
+    }
+
+    try {
+      const plan = await planService.createPlan({
+        itemId,
+        profile: profileFlag,
+        destination: destinationFlag,
+        validate: true,
+      });
+
+      if (isJson) {
+        emitSuccess('plan', {
+          plan,
+        });
+      } else {
+        const lines: string[] = [
+          'MediaLoom Operation Plan',
+          `  Plan ID:      ${plan.id}`,
+          `  Item ID:      ${plan.mediaItemId}`,
+          `  Profile:      ${plan.profile}`,
+          `  Destination:  ${plan.destinationRoot}`,
+          `  Status:       ${plan.status}`,
+          `  Created:      ${new Date(plan.createdAt).toISOString()}`,
+        ];
+        if (plan.failureReason) {
+          lines.push(`  Failure:      ${plan.failureReason}`);
+        }
+        lines.push('', `  Operations (${plan.operations.length}):`);
+        for (const [idx, op] of plan.operations.entries()) {
+          const num = `[${idx + 1}]`.padEnd(5);
+          if (op.type === 'mkdir') {
+            lines.push(`    ${num} mkdir     ${op.path}`);
+          } else if (op.type === 'move') {
+            lines.push(`    ${num} move      ${op.source} -> ${op.destination}`);
+          } else if (op.type === 'writeText') {
+            lines.push(`    ${num} writeText ${op.path} (${op.content.length} chars)`);
+          }
+        }
+        if (plan.validation) {
+          lines.push(
+            '',
+            `  Validation:   ${plan.validation.valid ? 'VALID' : 'INVALID'} (${plan.validation.issues.length} issues)`,
+          );
+          for (const issue of plan.validation.issues) {
+            const sev = issue.severity.toUpperCase();
+            lines.push(`    - [${sev}] ${issue.code}: ${issue.message}`);
+          }
+        }
+        lines.push('');
+        streams.stdout.write(lines.join('\n'));
+      }
+      return plan.status === 'FAILED' ? ExitCode.CONFLICT : ExitCode.SUCCESS;
+    } catch (err) {
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'plan',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Plan error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
+    }
+  }
+
+  if (command === 'plans') {
+    try {
+      const plans = await planService.listPlans();
+
+      if (isJson) {
+        emitSuccess('plans', {
+          plans,
+        });
+      } else {
+        if (plans.length === 0) {
+          streams.stdout.write('No operation plans found.\n');
+        } else {
+          const lines: string[] = [
+            `Operation Plans (${plans.length} total):`,
+            '',
+            `${'ID'.padEnd(28)} ${'STATUS'.padEnd(12)} ${'PROFILE'.padEnd(12)} ${'ITEM ID'.padEnd(28)} DESTINATION`,
+            '-'.repeat(105),
+          ];
+          for (const p of plans) {
+            lines.push(
+              `${p.id.padEnd(28)} ${p.status.padEnd(12)} ${p.profile.padEnd(12)} ${p.mediaItemId.padEnd(28)} ${p.destinationRoot}`,
+            );
+          }
+          lines.push('');
+          streams.stdout.write(lines.join('\n'));
+        }
+      }
+      return ExitCode.SUCCESS;
+    } catch (err) {
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'plans',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Plans error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
+    }
+  }
+
+  if (command === 'plan-show') {
+    const planId = positional[1];
+    if (!planId) {
+      emitError(
+        'plan-show',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required <id> argument for plan-show command.',
+        },
+        'Error: Missing required <id> argument for plan-show command.',
+      );
+      return ExitCode.INVALID_INPUT;
+    }
+
+    try {
+      const plan = await planService.getPlan(planId);
+      if (!plan) {
+        emitError(
+          'plan-show',
+          {
+            code: ErrorCode.ITEM_NOT_FOUND,
+            message: `OperationPlan "${planId}" not found.`,
+          },
+          `Plan not found: ${planId}`,
+        );
+        return ExitCode.GENERIC_FAILURE;
+      }
+
+      if (isJson) {
+        emitSuccess('plan-show', {
+          plan,
+        });
+      } else {
+        const lines: string[] = [
+          'MediaLoom Operation Plan',
+          `  Plan ID:      ${plan.id}`,
+          `  Item ID:      ${plan.mediaItemId}`,
+          `  Profile:      ${plan.profile}`,
+          `  Destination:  ${plan.destinationRoot}`,
+          `  Status:       ${plan.status}`,
+          `  Created:      ${new Date(plan.createdAt).toISOString()}`,
+        ];
+        if (plan.validatedAt) {
+          lines.push(`  Validated:    ${new Date(plan.validatedAt).toISOString()}`);
+        }
+        if (plan.appliedAt) {
+          lines.push(`  Applied:      ${new Date(plan.appliedAt).toISOString()}`);
+        }
+        if (plan.failureReason) {
+          lines.push(`  Failure:      ${plan.failureReason}`);
+        }
+        lines.push('', `  Operations (${plan.operations.length}):`);
+        for (const [idx, op] of plan.operations.entries()) {
+          const num = `[${idx + 1}]`.padEnd(5);
+          if (op.type === 'mkdir') {
+            lines.push(`    ${num} mkdir     ${op.path}`);
+          } else if (op.type === 'move') {
+            lines.push(`    ${num} move      ${op.source} -> ${op.destination}`);
+          } else if (op.type === 'writeText') {
+            lines.push(`    ${num} writeText ${op.path} (${op.content.length} chars)`);
+          }
+        }
+        if (plan.validation) {
+          lines.push(
+            '',
+            `  Validation:   ${plan.validation.valid ? 'VALID' : 'INVALID'} (${plan.validation.issues.length} issues)`,
+          );
+          for (const issue of plan.validation.issues) {
+            const sev = issue.severity.toUpperCase();
+            lines.push(`    - [${sev}] ${issue.code}: ${issue.message}`);
+          }
+        }
+        lines.push('');
+        streams.stdout.write(lines.join('\n'));
+      }
+      return ExitCode.SUCCESS;
+    } catch (err) {
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'plan-show',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Plan-show error: ${mapped.message}`,
       );
       return mapped.exitCode;
     }

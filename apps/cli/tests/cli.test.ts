@@ -13,9 +13,11 @@ import {
   itemsDataSchema,
   layoutEnvelopeSchema,
   matchDataSchema,
+  planDataSchema,
+  plansDataSchema,
   scanDataSchema,
 } from '@medialoom/contracts';
-import type { LayoutService, MatchingService, MetadataService } from '@medialoom/core';
+import type { LayoutService, MatchingService, MetadataService, PlanService } from '@medialoom/core';
 import { TINY_VIDEO_BUFFER } from '@medialoom/media';
 import { ProviderAuthenticationError, ProviderNetworkError } from '@medialoom/providers';
 import { type CliServices, runCli } from '../src';
@@ -757,6 +759,183 @@ describe('medialoom CLI', () => {
       const parsed = JSON.parse(jsonOut);
       expect(parsed.status).toBe('error');
       expect(parsed.error.message).toContain('Cannot generate layout for unmatched movie');
+    });
+  });
+
+  describe('medialoom plan, plans, and plan-show commands', () => {
+    const mockPlanDto = {
+      id: 'plan_matrix_123',
+      mediaItemId: 'movie_matrix_id',
+      profile: 'jellyfin',
+      destinationRoot: '/media/dest/movies',
+      status: 'VALIDATED' as const,
+      operations: [
+        {
+          type: 'mkdir' as const,
+          path: '/media/dest/movies/The Matrix (1999) [tmdbid-603]',
+        },
+        {
+          type: 'move' as const,
+          source: '/media/incoming/The.Matrix.1999.mkv',
+          destination:
+            '/media/dest/movies/The Matrix (1999) [tmdbid-603]/The Matrix (1999) [tmdbid-603].mkv',
+        },
+        {
+          type: 'writeText' as const,
+          path: '/media/dest/movies/The Matrix (1999) [tmdbid-603]/movie.nfo',
+          content: '<movie><title>The Matrix</title></movie>',
+        },
+      ],
+      validation: {
+        valid: true,
+        issues: [],
+      },
+      failureReason: null,
+      createdAt: new Date(),
+      validatedAt: new Date(),
+      appliedAt: null,
+    };
+
+    const mockPlanService = {
+      createPlan: async (input: { itemId: string; destination: string; profile?: string }) => {
+        if (input.itemId === 'missing_id') {
+          throw new Error('MediaItem "missing_id" not found in inventory.');
+        }
+        return mockPlanDto;
+      },
+      listPlans: async () => [mockPlanDto],
+      getPlan: async (id: string) => {
+        if (id === 'plan_matrix_123') return mockPlanDto;
+        return null;
+      },
+    } as unknown as PlanService;
+
+    it('generates plan in human-readable mode', async () => {
+      let stdout = '';
+      let stderr = '';
+      const code = await runCli(
+        ['plan', 'movie_matrix_id', '--profile', 'jellyfin', '--destination', '/media/dest/movies'],
+        {
+          stdout: { write: (c) => (stdout += c) },
+          stderr: { write: (c) => (stderr += c) },
+        },
+        { planService: mockPlanService },
+      );
+
+      expect(code).toBe(ExitCode.SUCCESS);
+      expect(stdout).toContain('MediaLoom Operation Plan');
+      expect(stdout).toContain('plan_matrix_123');
+      expect(stdout).toContain('movie_matrix_id');
+      expect(stdout).toContain('VALIDATED');
+      expect(stdout).toContain('mkdir');
+      expect(stdout).toContain('move');
+      expect(stdout).toContain('writeText');
+      expect(stderr).toBe('');
+    });
+
+    it('generates plan in --json mode conforming to schema', async () => {
+      let jsonStdout = '';
+      const code = await runCli(
+        [
+          'plan',
+          'movie_matrix_id',
+          '--profile',
+          'jellyfin',
+          '--destination',
+          '/media/dest/movies',
+          '--json',
+        ],
+        {
+          stdout: { write: (c) => (jsonStdout += c) },
+          stderr: { write: () => {} },
+        },
+        { planService: mockPlanService },
+      );
+
+      expect(code).toBe(ExitCode.SUCCESS);
+      const parsed = JSON.parse(jsonStdout);
+      const envelopeSchema = cliEnvelopeSchema(planDataSchema);
+      const validated = envelopeSchema.parse(parsed);
+      expect(validated.status).toBe('success');
+      expect(validated.data?.plan.id).toBe('plan_matrix_123');
+      expect(validated.data?.plan.operations).toHaveLength(3);
+    });
+
+    it('lists plans in human and --json mode', async () => {
+      let stdout = '';
+      const code = await runCli(
+        ['plans'],
+        {
+          stdout: { write: (c) => (stdout += c) },
+          stderr: { write: () => {} },
+        },
+        { planService: mockPlanService },
+      );
+
+      expect(code).toBe(ExitCode.SUCCESS);
+      expect(stdout).toContain('Operation Plans');
+      expect(stdout).toContain('plan_matrix_123');
+      expect(stdout).toContain('VALIDATED');
+
+      let jsonStdout = '';
+      const jsonCode = await runCli(
+        ['plans', '--json'],
+        {
+          stdout: { write: (c) => (jsonStdout += c) },
+          stderr: { write: () => {} },
+        },
+        { planService: mockPlanService },
+      );
+      expect(jsonCode).toBe(ExitCode.SUCCESS);
+      const parsed = JSON.parse(jsonStdout);
+      const envelopeSchema = cliEnvelopeSchema(plansDataSchema);
+      const validated = envelopeSchema.parse(parsed);
+      expect(validated.data?.plans).toHaveLength(1);
+    });
+
+    it('shows plan details via plan-show in human and --json mode', async () => {
+      let stdout = '';
+      const code = await runCli(
+        ['plan-show', 'plan_matrix_123'],
+        {
+          stdout: { write: (c) => (stdout += c) },
+          stderr: { write: () => {} },
+        },
+        { planService: mockPlanService },
+      );
+
+      expect(code).toBe(ExitCode.SUCCESS);
+      expect(stdout).toContain('MediaLoom Operation Plan');
+      expect(stdout).toContain('plan_matrix_123');
+
+      let jsonStdout = '';
+      const jsonCode = await runCli(
+        ['plan-show', 'plan_matrix_123', '--json'],
+        {
+          stdout: { write: (c) => (jsonStdout += c) },
+          stderr: { write: () => {} },
+        },
+        { planService: mockPlanService },
+      );
+      expect(jsonCode).toBe(ExitCode.SUCCESS);
+      const parsed = JSON.parse(jsonStdout);
+      const envelopeSchema = cliEnvelopeSchema(planDataSchema);
+      const validated = envelopeSchema.parse(parsed);
+      expect(validated.data?.plan.id).toBe('plan_matrix_123');
+    });
+
+    it('handles plan-show missing plan', async () => {
+      let stderr = '';
+      const code = await runCli(
+        ['plan-show', 'missing_plan'],
+        {
+          stdout: { write: () => {} },
+          stderr: { write: (c) => (stderr += c) },
+        },
+        { planService: mockPlanService },
+      );
+      expect(code).toBe(ExitCode.GENERIC_FAILURE);
+      expect(stderr).toContain('Plan not found');
     });
   });
 });

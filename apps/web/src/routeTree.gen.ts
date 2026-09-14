@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiV1HealthRouteImport } from './routes/api/v1/health'
 import { Route as ApiV1ScansRouteImport } from './routes/api/v1/scans'
 import { Route as ApiV1ItemsIndexRouteImport } from './routes/api/v1/items/index'
+import { Route as ApiV1PlansIndexRouteImport } from './routes/api/v1/plans/index'
+import { Route as ApiV1PlansIdRouteImport } from './routes/api/v1/plans/$id'
 import { Route as ApiV1ItemsIdIndexRouteImport } from './routes/api/v1/items/$id/index'
 import { Route as ApiV1ItemsIdCandidatesRouteImport } from './routes/api/v1/items/$id/candidates'
 import { Route as ApiV1ItemsIdMatchRouteImport } from './routes/api/v1/items/$id/match'
@@ -37,6 +39,16 @@ const ApiV1ItemsIndexRoute = ApiV1ItemsIndexRouteImport.update({
   path: '/api/v1/items/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1PlansIndexRoute = ApiV1PlansIndexRouteImport.update({
+  id: '/api/v1/plans/',
+  path: '/api/v1/plans/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1PlansIdRoute = ApiV1PlansIdRouteImport.update({
+  id: '/api/v1/plans/$id',
+  path: '/api/v1/plans/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1ItemsIdIndexRoute = ApiV1ItemsIdIndexRouteImport.update({
   id: '/api/v1/items/$id/',
   path: '/api/v1/items/$id/',
@@ -57,7 +69,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/v1/health': typeof ApiV1HealthRoute
   '/api/v1/scans': typeof ApiV1ScansRoute
+  '/api/v1/plans/$id': typeof ApiV1PlansIdRoute
   '/api/v1/items/': typeof ApiV1ItemsIndexRoute
+  '/api/v1/plans/': typeof ApiV1PlansIndexRoute
   '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
   '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
   '/api/v1/items/$id/': typeof ApiV1ItemsIdIndexRoute
@@ -66,7 +80,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/v1/health': typeof ApiV1HealthRoute
   '/api/v1/scans': typeof ApiV1ScansRoute
+  '/api/v1/plans/$id': typeof ApiV1PlansIdRoute
   '/api/v1/items': typeof ApiV1ItemsIndexRoute
+  '/api/v1/plans': typeof ApiV1PlansIndexRoute
   '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
   '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
   '/api/v1/items/$id': typeof ApiV1ItemsIdIndexRoute
@@ -76,7 +92,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/api/v1/health': typeof ApiV1HealthRoute
   '/api/v1/scans': typeof ApiV1ScansRoute
+  '/api/v1/plans/$id': typeof ApiV1PlansIdRoute
   '/api/v1/items/': typeof ApiV1ItemsIndexRoute
+  '/api/v1/plans/': typeof ApiV1PlansIndexRoute
   '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
   '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
   '/api/v1/items/$id/': typeof ApiV1ItemsIdIndexRoute
@@ -87,7 +105,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/v1/health'
     | '/api/v1/scans'
+    | '/api/v1/plans/$id'
     | '/api/v1/items/'
+    | '/api/v1/plans/'
     | '/api/v1/items/$id/candidates'
     | '/api/v1/items/$id/match'
     | '/api/v1/items/$id/'
@@ -96,7 +116,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/v1/health'
     | '/api/v1/scans'
+    | '/api/v1/plans/$id'
     | '/api/v1/items'
+    | '/api/v1/plans'
     | '/api/v1/items/$id/candidates'
     | '/api/v1/items/$id/match'
     | '/api/v1/items/$id'
@@ -105,7 +127,9 @@ export interface FileRouteTypes {
     | '/'
     | '/api/v1/health'
     | '/api/v1/scans'
+    | '/api/v1/plans/$id'
     | '/api/v1/items/'
+    | '/api/v1/plans/'
     | '/api/v1/items/$id/candidates'
     | '/api/v1/items/$id/match'
     | '/api/v1/items/$id/'
@@ -115,7 +139,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiV1HealthRoute: typeof ApiV1HealthRoute
   ApiV1ScansRoute: typeof ApiV1ScansRoute
+  ApiV1PlansIdRoute: typeof ApiV1PlansIdRoute
   ApiV1ItemsIndexRoute: typeof ApiV1ItemsIndexRoute
+  ApiV1PlansIndexRoute: typeof ApiV1PlansIndexRoute
   ApiV1ItemsIdCandidatesRoute: typeof ApiV1ItemsIdCandidatesRoute
   ApiV1ItemsIdMatchRoute: typeof ApiV1ItemsIdMatchRoute
   ApiV1ItemsIdIndexRoute: typeof ApiV1ItemsIdIndexRoute
@@ -151,6 +177,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1ItemsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/plans/': {
+      id: '/api/v1/plans/'
+      path: '/api/v1/plans'
+      fullPath: '/api/v1/plans/'
+      preLoaderRoute: typeof ApiV1PlansIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/plans/$id': {
+      id: '/api/v1/plans/$id'
+      path: '/api/v1/plans/$id'
+      fullPath: '/api/v1/plans/$id'
+      preLoaderRoute: typeof ApiV1PlansIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/items/$id/': {
       id: '/api/v1/items/$id/'
       path: '/api/v1/items/$id'
@@ -179,7 +219,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiV1HealthRoute: ApiV1HealthRoute,
   ApiV1ScansRoute: ApiV1ScansRoute,
+  ApiV1PlansIdRoute: ApiV1PlansIdRoute,
   ApiV1ItemsIndexRoute: ApiV1ItemsIndexRoute,
+  ApiV1PlansIndexRoute: ApiV1PlansIndexRoute,
   ApiV1ItemsIdCandidatesRoute: ApiV1ItemsIdCandidatesRoute,
   ApiV1ItemsIdMatchRoute: ApiV1ItemsIdMatchRoute,
   ApiV1ItemsIdIndexRoute: ApiV1ItemsIdIndexRoute,

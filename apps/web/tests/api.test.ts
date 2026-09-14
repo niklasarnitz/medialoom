@@ -9,6 +9,8 @@ import {
   inspectApiEnvelopeSchema,
   itemsApiEnvelopeSchema,
   matchApiEnvelopeSchema,
+  planApiEnvelopeSchema,
+  plansApiEnvelopeSchema,
   scanApiEnvelopeSchema,
 } from '@medialoom/contracts';
 import { defaultInventoryService, defaultSystemService } from '@medialoom/core';
@@ -20,6 +22,8 @@ import { Route as CandidatesRoute } from '../src/routes/api/v1/items/$id/candida
 import { Route as ItemDetailRoute } from '../src/routes/api/v1/items/$id/index';
 import { Route as MatchRoute } from '../src/routes/api/v1/items/$id/match';
 import { Route as ItemsRoute } from '../src/routes/api/v1/items/index';
+import { Route as PlanDetailRoute } from '../src/routes/api/v1/plans/$id';
+import { Route as PlansRoute } from '../src/routes/api/v1/plans/index';
 import { Route as ScansRoute } from '../src/routes/api/v1/scans';
 
 type HttpHandlerFn = (ctx: {
@@ -397,5 +401,121 @@ describe('Public HTTP API Routes (/api/v1)', () => {
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  describe('OperationPlan REST API endpoints', () => {
+    it('POST /api/v1/plans, GET /api/v1/plans, and GET /api/v1/plans/:id', async () => {
+      const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'medialoom-api-plan-'));
+      const sourceDir = path.join(tempDir, 'incoming');
+      const destDir = path.join(tempDir, 'movies');
+      await fs.mkdir(sourceDir, { recursive: true });
+      await fs.mkdir(destDir, { recursive: true });
+
+      const videoFile = path.join(sourceDir, 'Matrix.1999.mkv');
+      await fs.writeFile(videoFile, TINY_VIDEO_BUFFER);
+
+      const uniqueTmdbId = 777000 + Math.floor(Math.random() * 1000);
+      const movie = await defaultInventoryRepository.createMovie({
+        title: 'The Matrix Plan Test',
+        year: 1999,
+        status: 'MATCHED',
+        tmdbId: uniqueTmdbId,
+      });
+
+      const edition = await defaultInventoryRepository.createEdition({
+        movieId: movie.id,
+      });
+
+      const version = await defaultInventoryRepository.createMediaVersion({
+        editionId: edition.id,
+      });
+
+      await defaultInventoryRepository.createAsset({
+        mediaVersionId: version.id,
+        path: videoFile,
+        sizeBytes: 1024,
+        mtime: new Date(),
+      });
+
+      try {
+        // 1. POST /api/v1/plans
+        const postHandler = getRouteHandler(PlansRoute, 'POST');
+        const postReq = new Request('http://localhost:3000/api/v1/plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            itemId: movie.id,
+            profile: 'jellyfin',
+            destination: destDir,
+          }),
+        });
+
+        const postRes = await postHandler({
+          request: postReq,
+          params: {},
+          context: {},
+          pathname: '/api/v1/plans',
+          next: async () => new Response(),
+        });
+
+        expect(postRes.status).toBe(201);
+        const postJson = await postRes.json();
+        const createdPlanEnvelope = planApiEnvelopeSchema.parse(postJson);
+        expect(createdPlanEnvelope.data.plan.id).toBeDefined();
+        expect(createdPlanEnvelope.data.plan.status).toBe('VALIDATED');
+        expect(createdPlanEnvelope.data.plan.operations.length).toBeGreaterThanOrEqual(2);
+
+        const planId = createdPlanEnvelope.data.plan.id;
+
+        // 2. GET /api/v1/plans
+        const getPlansHandler = getRouteHandler(PlansRoute, 'GET');
+        const getPlansReq = new Request(
+          `http://localhost:3000/api/v1/plans?mediaItemId=${movie.id}`,
+        );
+        const getPlansRes = await getPlansHandler({
+          request: getPlansReq,
+          params: {},
+          context: {},
+          pathname: '/api/v1/plans',
+          next: async () => new Response(),
+        });
+
+        expect(getPlansRes.status).toBe(200);
+        const getPlansJson = await getPlansRes.json();
+        const listEnvelope = plansApiEnvelopeSchema.parse(getPlansJson);
+        expect(listEnvelope.data.plans.some((p) => p.id === planId)).toBe(true);
+
+        // 3. GET /api/v1/plans/:id
+        const getPlanHandler = getRouteHandler(PlanDetailRoute, 'GET');
+        const getPlanReq = new Request(`http://localhost:3000/api/v1/plans/${planId}`);
+        const getPlanRes = await getPlanHandler({
+          request: getPlanReq,
+          params: { id: planId },
+          context: {},
+          pathname: `/api/v1/plans/${planId}`,
+          next: async () => new Response(),
+        });
+
+        expect(getPlanRes.status).toBe(200);
+        const getPlanJson = await getPlanRes.json();
+        const singleEnvelope = planApiEnvelopeSchema.parse(getPlanJson);
+        expect(singleEnvelope.data.plan.id).toBe(planId);
+        expect(singleEnvelope.data.plan.destinationRoot).toBe(destDir);
+
+        // 4. GET /api/v1/plans/:id for non-existent id
+        const nonExistentReq = new Request('http://localhost:3000/api/v1/plans/non_existent_id');
+        const nonExistentRes = await getPlanHandler({
+          request: nonExistentReq,
+          params: { id: 'non_existent_id' },
+          context: {},
+          pathname: '/api/v1/plans/non_existent_id',
+          next: async () => new Response(),
+        });
+        expect(nonExistentRes.status).toBe(404);
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        await defaultInventoryRepository.deleteMovie(movie.id).catch(() => {});
+      }
+    });
   });
 });

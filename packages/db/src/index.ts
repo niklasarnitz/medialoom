@@ -5,12 +5,14 @@ export type {
   MediaTechnicalMetadata,
   MediaVersion,
   Movie,
+  OperationPlan,
   Prisma,
   Scan,
   SystemMetadata,
 } from '@prisma/client';
 export * from './client';
 export * from './repositories/inventory-repository';
+export * from './repositories/plan-repository';
 export * from './repositories/settings-repository';
 export * from './utils/path';
 

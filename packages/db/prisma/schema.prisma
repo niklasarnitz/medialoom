@@ -31,9 +31,11 @@ model Movie {
   updatedAt       DateTime  @updatedAt
 
   editions        Edition[]
+  operationPlans  OperationPlan[]
 
   @@index([status])
 }
+
 
 model Edition {
   id            String         @id @default(cuid())
@@ -173,3 +175,24 @@ model Scan {
 
   @@index([status])
 }
+
+model OperationPlan {
+  id              String    @id @default(cuid())
+  mediaItemId     String
+  profile         String
+  destinationRoot String
+  status          String    @default("PENDING")
+  operationsJson  String
+  validationJson  String?
+  failureReason   String?
+  createdAt       DateTime  @default(now())
+  validatedAt     DateTime?
+  appliedAt       DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  mediaItem       Movie     @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@index([mediaItemId])
+  @@index([status])
+}
+

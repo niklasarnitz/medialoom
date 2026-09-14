@@ -7,6 +7,8 @@ import {
   scoreComponentsSchema,
   systemSettingEnvelopeSchema,
 } from './metadata';
+import { operationPlanDtoSchema } from './plan';
+
 import { layoutDataSchema } from './profile';
 import { doctorReportEnvelopeSchema, systemHealthSchema } from './system';
 
@@ -152,6 +154,16 @@ export type DoctorData = z.infer<typeof doctorDataSchema>;
 export const configDataSchema = systemSettingEnvelopeSchema;
 export type ConfigData = z.infer<typeof configDataSchema>;
 
+export const planDataSchema = z.object({
+  plan: operationPlanDtoSchema,
+});
+export type PlanData = z.infer<typeof planDataSchema>;
+
+export const plansDataSchema = z.object({
+  plans: z.array(operationPlanDtoSchema),
+});
+export type PlansData = z.infer<typeof plansDataSchema>;
+
 // Typed Envelopes
 export const scanApiEnvelopeSchema = apiSuccessEnvelopeSchema(scanDataSchema);
 export const itemsApiEnvelopeSchema = apiSuccessEnvelopeSchema(itemsDataSchema);
@@ -160,3 +172,5 @@ export const candidatesApiEnvelopeSchema = apiSuccessEnvelopeSchema(candidatesDa
 export const matchApiEnvelopeSchema = apiSuccessEnvelopeSchema(matchDataSchema);
 export const healthApiEnvelopeSchema = apiSuccessEnvelopeSchema(healthDataSchema);
 export const layoutApiEnvelopeSchema = apiSuccessEnvelopeSchema(layoutDataSchema);
+export const planApiEnvelopeSchema = apiSuccessEnvelopeSchema(planDataSchema);
+export const plansApiEnvelopeSchema = apiSuccessEnvelopeSchema(plansDataSchema);

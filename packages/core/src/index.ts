@@ -4,4 +4,7 @@ export * from './layout/layout-service';
 export * from './matching/matching-service';
 export * from './matching/movie-matcher';
 export * from './metadata/metadata-service';
+export * from './plan/plan-generator';
+export * from './plan/plan-service';
+export * from './plan/plan-validator';
 export * from './system/system-service';
