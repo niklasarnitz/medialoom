@@ -1,4 +1,4 @@
-import type { ItemMatchResult } from '@medialoom/contracts';
+import { ErrorCode, ExitCode, type ItemMatchResult } from '@medialoom/contracts';
 import {
   defaultInventoryService,
   defaultMatchingService,
@@ -9,6 +9,7 @@ import {
   type InventoryService,
   type MatchingService,
   type MetadataService,
+  mapErrorToStructured,
   type SystemService,
 } from '@medialoom/core';
 
@@ -65,7 +66,7 @@ export async function runCli(
   const isJson = flags.has('--json');
   const isHelp = flags.has('--help') || flags.has('-h') || positional[0] === 'help';
   const isVersion = flags.has('--version') || flags.has('-v') || positional[0] === 'version';
-  const command = positional[0];
+  const command = positional[0] || (isVersion ? 'version' : '');
 
   let systemService: SystemService;
   let inventoryService: InventoryService;
@@ -82,6 +83,38 @@ export async function runCli(
     inventoryService = systemOrServices.inventoryService ?? defaultInventoryService;
     metadataService = systemOrServices.metadataService ?? defaultMetadataService;
     matchingService = systemOrServices.matchingService ?? defaultMatchingService;
+  }
+
+  function emitSuccess(commandName: string, data: unknown): void {
+    if (isJson) {
+      streams.stdout.write(
+        `${serializeJson({
+          schemaVersion: 1,
+          command: commandName,
+          status: 'success',
+          data,
+        })}\n`,
+      );
+    }
+  }
+
+  function emitError(
+    commandName: string,
+    errorObj: { code: string; message: string; details?: Record<string, unknown> },
+    humanMessage?: string,
+  ): void {
+    if (isJson) {
+      streams.stdout.write(
+        `${serializeJson({
+          schemaVersion: 1,
+          command: commandName,
+          status: 'error',
+          error: errorObj,
+        })}\n`,
+      );
+    } else {
+      streams.stderr.write(`${humanMessage ?? errorObj.message}\n`);
+    }
   }
 
   if (isHelp || (!command && !isVersion)) {
@@ -112,63 +145,81 @@ export async function runCli(
         '  --provider <p>      Metadata provider for matching (default: tmdb)',
         '  --id <id>           Provider movie ID for manual match override',
         '',
+        'Exit Codes:',
+        '  0                   Success',
+        '  1                   Generic failure',
+        '  2                   Invalid input or configuration',
+        '  3                   Review required / unmatched',
+        '  4                   Provider or network failure',
+        '  5                   Resource or filesystem conflict',
+        '',
       ].join('\n'),
     );
-    return 0;
+    return ExitCode.SUCCESS;
   }
 
-  if (isVersion) {
+  if (command === 'version' || isVersion) {
     const version = systemService.getVersion();
     if (isJson) {
-      streams.stdout.write(`${serializeJson({ schemaVersion: 1, version })}\n`);
+      emitSuccess('version', { version });
     } else {
       streams.stdout.write(`medialoom ${version}\n`);
     }
-    return 0;
+    return ExitCode.SUCCESS;
   }
 
   if (command === 'doctor') {
-    const report = await systemService.getDoctorReport();
-    if (isJson) {
-      streams.stdout.write(`${serializeJson(report)}\n`);
-    } else {
-      const lines: string[] = [
-        `MediaLoom Diagnostics (v${report.version})`,
-        `Status: ${report.status.toUpperCase()}`,
-        `Timestamp: ${report.timestamp}`,
-        '',
-        'Checks:',
-      ];
-      for (const check of report.checks) {
-        const symbol = check.status === 'ok' ? '✓' : check.status === 'warn' ? '!' : '✗';
-        lines.push(`  [${symbol}] ${check.name}: ${check.message}`);
+    try {
+      const report = await systemService.getDoctorReport();
+      if (isJson) {
+        emitSuccess('doctor', report);
+      } else {
+        const lines: string[] = [
+          `MediaLoom Diagnostics (v${report.version})`,
+          `Status: ${report.status.toUpperCase()}`,
+          `Timestamp: ${report.timestamp}`,
+          '',
+          'Checks:',
+        ];
+        for (const check of report.checks) {
+          const symbol = check.status === 'ok' ? '✓' : check.status === 'warn' ? '!' : '✗';
+          lines.push(`  [${symbol}] ${check.name}: ${check.message}`);
+        }
+        lines.push('');
+        streams.stdout.write(lines.join('\n'));
       }
-      lines.push('');
-      streams.stdout.write(lines.join('\n'));
+      return report.status === 'error' ? ExitCode.GENERIC_FAILURE : ExitCode.SUCCESS;
+    } catch (err) {
+      const mapped = mapErrorToStructured(err);
+      emitError('doctor', { code: mapped.code, message: mapped.message, details: mapped.details });
+      return mapped.exitCode;
     }
-    return report.status === 'error' ? 1 : 0;
   }
 
   if (command === 'scan') {
     const scanPath = positional[1];
     if (!scanPath) {
-      streams.stderr.write('Error: Missing required <path> argument for scan command.\n');
-      return 1;
+      emitError(
+        'scan',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required <path> argument for scan command.',
+        },
+        'Error: Missing required <path> argument for scan command.',
+      );
+      return ExitCode.INVALID_INPUT;
     }
 
     try {
       const result = await inventoryService.scan(scanPath);
       if (isJson) {
-        streams.stdout.write(
-          `${serializeJson({
-            schemaVersion: 1,
-            scanId: result.scanId,
-            discovered: result.discovered,
-            created: result.created,
-            updated: result.updated,
-            failed: result.failed,
-          })}\n`,
-        );
+        emitSuccess('scan', {
+          scanId: result.scanId,
+          discovered: result.discovered,
+          created: result.created,
+          updated: result.updated,
+          failed: result.failed,
+        });
       } else {
         const lines: string[] = [
           'MediaLoom Scan Report',
@@ -181,15 +232,15 @@ export async function runCli(
         ];
         streams.stdout.write(lines.join('\n'));
       }
-      return result.failed > 0 ? 1 : 0;
+      return result.failed > 0 ? ExitCode.GENERIC_FAILURE : ExitCode.SUCCESS;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isJson) {
-        streams.stdout.write(`${serializeJson({ schemaVersion: 1, error: message })}\n`);
-      } else {
-        streams.stderr.write(`Scan error: ${message}\n`);
-      }
-      return 1;
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'scan',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Scan error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
     }
   }
 
@@ -197,7 +248,7 @@ export async function runCli(
     try {
       const items = await inventoryService.listItems();
       if (isJson) {
-        streams.stdout.write(`${serializeJson({ schemaVersion: 1, items })}\n`);
+        emitSuccess('items', { items });
       } else {
         if (items.length === 0) {
           streams.stdout.write('No media items found in library.\n');
@@ -218,40 +269,48 @@ export async function runCli(
           streams.stdout.write(lines.join('\n'));
         }
       }
-      return 0;
+      return ExitCode.SUCCESS;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isJson) {
-        streams.stdout.write(`${serializeJson({ schemaVersion: 1, error: message })}\n`);
-      } else {
-        streams.stderr.write(`Failed to list items: ${message}\n`);
-      }
-      return 1;
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'items',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Failed to list items: ${mapped.message}`,
+      );
+      return mapped.exitCode;
     }
   }
 
   if (command === 'inspect') {
     const itemId = positional[1];
     if (!itemId) {
-      streams.stderr.write('Error: Missing required <id> argument for inspect command.\n');
-      return 1;
+      emitError(
+        'inspect',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required <id> argument for inspect command.',
+        },
+        'Error: Missing required <id> argument for inspect command.',
+      );
+      return ExitCode.INVALID_INPUT;
     }
 
     try {
       const item = await inventoryService.getItem(itemId);
       if (!item) {
-        if (isJson) {
-          streams.stdout.write(
-            `${serializeJson({ schemaVersion: 1, error: `Item "${itemId}" not found` })}\n`,
-          );
-        } else {
-          streams.stderr.write(`Item not found: ${itemId}\n`);
-        }
-        return 1;
+        emitError(
+          'inspect',
+          {
+            code: ErrorCode.ITEM_NOT_FOUND,
+            message: `MediaItem "${itemId}" not found in inventory.`,
+          },
+          `Item not found: ${itemId}`,
+        );
+        return ExitCode.GENERIC_FAILURE;
       }
 
       if (isJson) {
-        streams.stdout.write(`${serializeJson({ schemaVersion: 1, item })}\n`);
+        emitSuccess('inspect', { item });
       } else {
         const lines: string[] = [
           `MediaItem: ${item.title} ${item.year ? `(${item.year})` : ''}`,
@@ -344,29 +403,30 @@ export async function runCli(
         lines.push('');
         streams.stdout.write(lines.join('\n'));
       }
-      return 0;
+      return ExitCode.SUCCESS;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isJson) {
-        streams.stdout.write(`${serializeJson({ schemaVersion: 1, error: message })}\n`);
-      } else {
-        streams.stderr.write(`Failed to inspect item: ${message}\n`);
-      }
-      return 1;
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'inspect',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Failed to inspect item: ${mapped.message}`,
+      );
+      return mapped.exitCode;
     }
   }
 
   if (command === 'candidates') {
     const itemId = positional[1];
     if (!itemId) {
-      if (isJson) {
-        streams.stdout.write(
-          `${serializeJson({ schemaVersion: 1, error: 'Missing required <id> argument for candidates command.' })}\n`,
-        );
-      } else {
-        streams.stderr.write('Error: Missing required <id> argument for candidates command.\n');
-      }
-      return 1;
+      emitError(
+        'candidates',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required <id> argument for candidates command.',
+        },
+        'Error: Missing required <id> argument for candidates command.',
+      );
+      return ExitCode.INVALID_INPUT;
     }
 
     try {
@@ -375,17 +435,14 @@ export async function runCli(
       const evaluation = defaultMovieMatcher.evaluateCandidates(localMetadata, result.candidates);
 
       if (isJson) {
-        streams.stdout.write(
-          `${serializeJson({
-            schemaVersion: 1,
-            itemId: result.item.id,
-            query: result.query,
-            year: result.year,
-            decision: evaluation.decision,
-            candidates: result.candidates,
-            evaluations: evaluation.evaluations,
-          })}\n`,
-        );
+        emitSuccess('candidates', {
+          itemId: result.item.id,
+          query: result.query,
+          year: result.year,
+          decision: evaluation.decision,
+          candidates: result.candidates,
+          evaluations: evaluation.evaluations,
+        });
       } else {
         const lines: string[] = [
           `MediaItem: ${result.item.title}${result.year ? ` (${result.year})` : ''} [ID: ${result.item.id}]`,
@@ -421,29 +478,30 @@ export async function runCli(
         }
         streams.stdout.write(lines.join('\n'));
       }
-      return 0;
+      return ExitCode.SUCCESS;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isJson) {
-        streams.stdout.write(`${serializeJson({ schemaVersion: 1, error: message })}\n`);
-      } else {
-        streams.stderr.write(`Candidates error: ${message}\n`);
-      }
-      return 1;
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'candidates',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Candidates error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
     }
   }
 
   if (command === 'match') {
     const itemId = positional[1];
     if (!itemId) {
-      if (isJson) {
-        streams.stdout.write(
-          `${serializeJson({ schemaVersion: 1, error: 'Missing required <id> argument for match command.' })}\n`,
-        );
-      } else {
-        streams.stderr.write('Error: Missing required <id> argument for match command.\n');
-      }
-      return 1;
+      emitError(
+        'match',
+        {
+          code: ErrorCode.INVALID_ARGUMENT,
+          message: 'Missing required <id> argument for match command.',
+        },
+        'Error: Missing required <id> argument for match command.',
+      );
+      return ExitCode.INVALID_INPUT;
     }
 
     try {
@@ -458,19 +516,16 @@ export async function runCli(
       }
 
       if (isJson) {
-        streams.stdout.write(
-          `${serializeJson({
-            schemaVersion: 1,
-            itemId: result.itemId,
-            decision: result.decision,
-            score: result.score,
-            components: result.components,
-            matched: result.decision === 'AUTO_MATCH',
-            isManual: result.isManual,
-            candidate: result.selectedCandidate,
-            evaluations: result.evaluations,
-          })}\n`,
-        );
+        emitSuccess('match', {
+          itemId: result.itemId,
+          decision: result.decision,
+          score: result.score,
+          components: result.components,
+          matched: result.decision === 'AUTO_MATCH',
+          isManual: result.isManual,
+          candidate: result.selectedCandidate,
+          evaluations: result.evaluations,
+        });
       } else {
         const lines: string[] = [
           'MediaLoom Match Decision',
@@ -506,15 +561,19 @@ export async function runCli(
         lines.push('');
         streams.stdout.write(lines.join('\n'));
       }
-      return 0;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (isJson) {
-        streams.stdout.write(`${serializeJson({ schemaVersion: 1, error: message })}\n`);
-      } else {
-        streams.stderr.write(`Match error: ${message}\n`);
+
+      if (result.decision === 'REVIEW_REQUIRED' || result.decision === 'UNMATCHED') {
+        return ExitCode.REVIEW_REQUIRED;
       }
-      return 1;
+      return ExitCode.SUCCESS;
+    } catch (err) {
+      const mapped = mapErrorToStructured(err);
+      emitError(
+        'match',
+        { code: mapped.code, message: mapped.message, details: mapped.details },
+        `Match error: ${mapped.message}`,
+      );
+      return mapped.exitCode;
     }
   }
 
@@ -530,95 +589,119 @@ export async function runCli(
         targetKey === 'tmdb.api_key' ||
         targetKey === 'tmdb_token'
       ) {
-        const info = await systemService.getTmdbApiKeyMasked();
-        if (isJson) {
-          streams.stdout.write(
-            `${serializeJson({
+        try {
+          const info = await systemService.getTmdbApiKeyMasked();
+          if (isJson) {
+            emitSuccess('config', {
               schemaVersion: 1,
               key: 'tmdb_api_key',
               value: info.maskedKey,
               masked: true,
               configured: info.configured,
-            })}\n`,
-          );
-        } else {
-          if (info.configured) {
-            streams.stdout.write(`tmdb_api_key: ${info.maskedKey} (configured in SQLite)\n`);
+            });
           } else {
-            streams.stdout.write('tmdb_api_key: (not configured)\n');
+            if (info.configured) {
+              streams.stdout.write(`tmdb_api_key: ${info.maskedKey} (configured in SQLite)\n`);
+            } else {
+              streams.stdout.write('tmdb_api_key: (not configured)\n');
+            }
           }
+          return ExitCode.SUCCESS;
+        } catch (err) {
+          const mapped = mapErrorToStructured(err);
+          emitError('config', { code: mapped.code, message: mapped.message });
+          return mapped.exitCode;
         }
-        return 0;
       }
 
-      if (isJson) {
-        streams.stdout.write(
-          `${serializeJson({ schemaVersion: 1, error: `Unknown config key "${targetKey}"` })}\n`,
-        );
-      } else {
-        streams.stderr.write(`Unknown config key: ${targetKey}\n`);
-      }
-      return 1;
+      emitError(
+        'config',
+        {
+          code: ErrorCode.INVALID_CONFIG,
+          message: `Unknown config key "${targetKey}"`,
+        },
+        `Unknown config key: ${targetKey}`,
+      );
+      return ExitCode.INVALID_INPUT;
     }
 
     if (subCommand === 'set') {
       if (!key) {
-        if (isJson) {
-          streams.stdout.write(
-            `${serializeJson({ schemaVersion: 1, error: 'Missing required <key> argument for config set.' })}\n`,
-          );
-        } else {
-          streams.stderr.write('Error: Missing required <key> argument for config set.\n');
-        }
-        return 1;
+        emitError(
+          'config',
+          {
+            code: ErrorCode.INVALID_ARGUMENT,
+            message: 'Missing required <key> argument for config set.',
+          },
+          'Error: Missing required <key> argument for config set.',
+        );
+        return ExitCode.INVALID_INPUT;
       }
       if (value === undefined) {
-        if (isJson) {
-          streams.stdout.write(
-            `${serializeJson({ schemaVersion: 1, error: 'Missing required <value> argument for config set.' })}\n`,
-          );
-        } else {
-          streams.stderr.write('Error: Missing required <value> argument for config set.\n');
-        }
-        return 1;
+        emitError(
+          'config',
+          {
+            code: ErrorCode.INVALID_ARGUMENT,
+            message: 'Missing required <value> argument for config set.',
+          },
+          'Error: Missing required <value> argument for config set.',
+        );
+        return ExitCode.INVALID_INPUT;
       }
 
       if (key === 'tmdb_api_key' || key === 'tmdb.api_key' || key === 'tmdb_token') {
-        await systemService.setTmdbApiKey(value);
-        const info = await systemService.getTmdbApiKeyMasked();
-        if (isJson) {
-          streams.stdout.write(
-            `${serializeJson({
+        try {
+          await systemService.setTmdbApiKey(value);
+          const info = await systemService.getTmdbApiKeyMasked();
+          if (isJson) {
+            emitSuccess('config', {
               schemaVersion: 1,
               key: 'tmdb_api_key',
               value: info.maskedKey,
               masked: true,
               configured: info.configured,
               message: 'TMDb API key saved successfully.',
-            })}\n`,
-          );
-        } else {
-          streams.stdout.write('✓ TMDb API key saved successfully.\n');
+            });
+          } else {
+            streams.stdout.write('✓ TMDb API key saved successfully.\n');
+          }
+          return ExitCode.SUCCESS;
+        } catch (err) {
+          const mapped = mapErrorToStructured(err);
+          emitError('config', { code: mapped.code, message: mapped.message });
+          return mapped.exitCode;
         }
-        return 0;
       }
 
-      if (isJson) {
-        streams.stdout.write(
-          `${serializeJson({ schemaVersion: 1, error: `Unknown config key "${key}"` })}\n`,
-        );
-      } else {
-        streams.stderr.write(`Unknown config key: ${key}\n`);
-      }
-      return 1;
+      emitError(
+        'config',
+        {
+          code: ErrorCode.INVALID_CONFIG,
+          message: `Unknown config key "${key}"`,
+        },
+        `Unknown config key: ${key}`,
+      );
+      return ExitCode.INVALID_INPUT;
     }
 
-    streams.stderr.write(
-      'Usage: medialoom config get [key] | medialoom config set <key> <value>\n',
+    emitError(
+      'config',
+      {
+        code: ErrorCode.INVALID_ARGUMENT,
+        message: 'Usage: medialoom config get [key] | medialoom config set <key> <value>',
+      },
+      'Usage: medialoom config get [key] | medialoom config set <key> <value>',
     );
-    return 1;
+    return ExitCode.INVALID_INPUT;
   }
 
-  streams.stderr.write(`Unknown command: ${command}. Use --help to view available commands.\n`);
-  return 1;
+  emitError(
+    'unknown',
+    {
+      code: ErrorCode.INVALID_ARGUMENT,
+      message: `Unknown command: ${command}. Use --help to view available commands.`,
+    },
+    `Unknown command: ${command}. Use --help to view available commands.`,
+  );
+  return ExitCode.INVALID_INPUT;
 }

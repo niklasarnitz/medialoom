@@ -12,6 +12,7 @@
     "@medialoom/config": "workspace:*",
     "@medialoom/db": "workspace:*",
     "@medialoom/media": "workspace:*",
-    "@medialoom/providers": "workspace:*"
+    "@medialoom/providers": "workspace:*",
+    "zod": "^3.24.2"
   }
 }

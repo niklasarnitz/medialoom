@@ -10,33 +10,115 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiV1HealthRouteImport } from './routes/api/v1/health'
+import { Route as ApiV1ScansRouteImport } from './routes/api/v1/scans'
+import { Route as ApiV1ItemsIndexRouteImport } from './routes/api/v1/items/index'
+import { Route as ApiV1ItemsIdIndexRouteImport } from './routes/api/v1/items/$id/index'
+import { Route as ApiV1ItemsIdCandidatesRouteImport } from './routes/api/v1/items/$id/candidates'
+import { Route as ApiV1ItemsIdMatchRouteImport } from './routes/api/v1/items/$id/match'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1HealthRoute = ApiV1HealthRouteImport.update({
+  id: '/api/v1/health',
+  path: '/api/v1/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ScansRoute = ApiV1ScansRouteImport.update({
+  id: '/api/v1/scans',
+  path: '/api/v1/scans',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ItemsIndexRoute = ApiV1ItemsIndexRouteImport.update({
+  id: '/api/v1/items/',
+  path: '/api/v1/items/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ItemsIdIndexRoute = ApiV1ItemsIdIndexRouteImport.update({
+  id: '/api/v1/items/$id/',
+  path: '/api/v1/items/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ItemsIdCandidatesRoute = ApiV1ItemsIdCandidatesRouteImport.update({
+  id: '/api/v1/items/$id/candidates',
+  path: '/api/v1/items/$id/candidates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ItemsIdMatchRoute = ApiV1ItemsIdMatchRouteImport.update({
+  id: '/api/v1/items/$id/match',
+  path: '/api/v1/items/$id/match',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/v1/health': typeof ApiV1HealthRoute
+  '/api/v1/scans': typeof ApiV1ScansRoute
+  '/api/v1/items/': typeof ApiV1ItemsIndexRoute
+  '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
+  '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
+  '/api/v1/items/$id/': typeof ApiV1ItemsIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/v1/health': typeof ApiV1HealthRoute
+  '/api/v1/scans': typeof ApiV1ScansRoute
+  '/api/v1/items': typeof ApiV1ItemsIndexRoute
+  '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
+  '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
+  '/api/v1/items/$id': typeof ApiV1ItemsIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/v1/health': typeof ApiV1HealthRoute
+  '/api/v1/scans': typeof ApiV1ScansRoute
+  '/api/v1/items/': typeof ApiV1ItemsIndexRoute
+  '/api/v1/items/$id/candidates': typeof ApiV1ItemsIdCandidatesRoute
+  '/api/v1/items/$id/match': typeof ApiV1ItemsIdMatchRoute
+  '/api/v1/items/$id/': typeof ApiV1ItemsIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/api/v1/health'
+    | '/api/v1/scans'
+    | '/api/v1/items/'
+    | '/api/v1/items/$id/candidates'
+    | '/api/v1/items/$id/match'
+    | '/api/v1/items/$id/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/api/v1/health'
+    | '/api/v1/scans'
+    | '/api/v1/items'
+    | '/api/v1/items/$id/candidates'
+    | '/api/v1/items/$id/match'
+    | '/api/v1/items/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/v1/health'
+    | '/api/v1/scans'
+    | '/api/v1/items/'
+    | '/api/v1/items/$id/candidates'
+    | '/api/v1/items/$id/match'
+    | '/api/v1/items/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiV1HealthRoute: typeof ApiV1HealthRoute
+  ApiV1ScansRoute: typeof ApiV1ScansRoute
+  ApiV1ItemsIndexRoute: typeof ApiV1ItemsIndexRoute
+  ApiV1ItemsIdCandidatesRoute: typeof ApiV1ItemsIdCandidatesRoute
+  ApiV1ItemsIdMatchRoute: typeof ApiV1ItemsIdMatchRoute
+  ApiV1ItemsIdIndexRoute: typeof ApiV1ItemsIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +130,59 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/health': {
+      id: '/api/v1/health'
+      path: '/api/v1/health'
+      fullPath: '/api/v1/health'
+      preLoaderRoute: typeof ApiV1HealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/scans': {
+      id: '/api/v1/scans'
+      path: '/api/v1/scans'
+      fullPath: '/api/v1/scans'
+      preLoaderRoute: typeof ApiV1ScansRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/items/': {
+      id: '/api/v1/items/'
+      path: '/api/v1/items'
+      fullPath: '/api/v1/items/'
+      preLoaderRoute: typeof ApiV1ItemsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/items/$id/': {
+      id: '/api/v1/items/$id/'
+      path: '/api/v1/items/$id'
+      fullPath: '/api/v1/items/$id/'
+      preLoaderRoute: typeof ApiV1ItemsIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/items/$id/candidates': {
+      id: '/api/v1/items/$id/candidates'
+      path: '/api/v1/items/$id/candidates'
+      fullPath: '/api/v1/items/$id/candidates'
+      preLoaderRoute: typeof ApiV1ItemsIdCandidatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/items/$id/match': {
+      id: '/api/v1/items/$id/match'
+      path: '/api/v1/items/$id/match'
+      fullPath: '/api/v1/items/$id/match'
+      preLoaderRoute: typeof ApiV1ItemsIdMatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiV1HealthRoute: ApiV1HealthRoute,
+  ApiV1ScansRoute: ApiV1ScansRoute,
+  ApiV1ItemsIndexRoute: ApiV1ItemsIndexRoute,
+  ApiV1ItemsIdCandidatesRoute: ApiV1ItemsIdCandidatesRoute,
+  ApiV1ItemsIdMatchRoute: ApiV1ItemsIdMatchRoute,
+  ApiV1ItemsIdIndexRoute: ApiV1ItemsIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

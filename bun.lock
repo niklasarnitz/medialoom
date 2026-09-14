@@ -22,6 +22,7 @@
         "@medialoom/config": "workspace:*",
         "@medialoom/contracts": "workspace:*",
         "@medialoom/core": "workspace:*",
+        "zod": "^3.24.2",
       },
       "devDependencies": {
         "@medialoom/media": "workspace:*",
@@ -37,6 +38,7 @@
         "@tanstack/react-start": "^1.168.53",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
+        "zod": "^3.24.2",
       },
       "devDependencies": {
         "@types/react": "^19.0.8",
@@ -67,6 +69,8 @@
         "@medialoom/contracts": "workspace:*",
         "@medialoom/db": "workspace:*",
         "@medialoom/media": "workspace:*",
+        "@medialoom/providers": "workspace:*",
+        "zod": "^3.24.2",
       },
     },
     "packages/db": {

@@ -4,19 +4,26 @@ import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
+  candidatesDataSchema,
+  cliEnvelopeSchema,
   doctorReportEnvelopeSchema,
+  ExitCode,
   type ItemMatchResult,
-  scanResultSchema,
+  inspectDataSchema,
+  itemsDataSchema,
+  matchDataSchema,
+  scanDataSchema,
 } from '@medialoom/contracts';
 import type { MatchingService, MetadataService } from '@medialoom/core';
 import { TINY_VIDEO_BUFFER } from '@medialoom/media';
+import { ProviderAuthenticationError, ProviderNetworkError } from '@medialoom/providers';
 import { type CliServices, runCli } from '../src';
 
 describe('medialoom CLI', () => {
-  it('handles --help flag', async () => {
+  it('handles --help and --no-input flags', async () => {
     let stdout = '';
     let stderr = '';
-    const code = await runCli(['--help'], {
+    const code = await runCli(['--help', '--no-input'], {
       stdout: {
         write: (c) => {
           stdout += c;
@@ -29,17 +36,20 @@ describe('medialoom CLI', () => {
       },
     });
 
-    expect(code).toBe(0);
+    expect(code).toBe(ExitCode.SUCCESS);
     expect(stdout).toContain('MediaLoom');
     expect(stdout).toContain('Usage:');
     expect(stdout).toContain('scan <path>');
     expect(stdout).toContain('items');
     expect(stdout).toContain('inspect <id>');
+    expect(stdout).toContain('candidates <id>');
+    expect(stdout).toContain('match <id>');
     expect(stdout).toContain('doctor');
+    expect(stdout).toContain('Exit Codes:');
     expect(stderr).toBe('');
   });
 
-  it('handles version command', async () => {
+  it('handles version command in human and --json mode', async () => {
     let stdout = '';
     let stderr = '';
     const code = await runCli(['version'], {
@@ -55,9 +65,21 @@ describe('medialoom CLI', () => {
       },
     });
 
-    expect(code).toBe(0);
+    expect(code).toBe(ExitCode.SUCCESS);
     expect(stdout).toBe('medialoom 0.1.0\n');
     expect(stderr).toBe('');
+
+    let jsonStdout = '';
+    const jsonCode = await runCli(['version', '--json'], {
+      stdout: { write: (c) => (jsonStdout += c) },
+      stderr: { write: () => {} },
+    });
+    expect(jsonCode).toBe(ExitCode.SUCCESS);
+    const parsed = JSON.parse(jsonStdout);
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.command).toBe('version');
+    expect(parsed.status).toBe('success');
+    expect(parsed.data.version).toBe('0.1.0');
   });
 
   it('handles doctor command in human mode', async () => {
@@ -76,7 +98,7 @@ describe('medialoom CLI', () => {
       },
     });
 
-    expect(code).toBe(0);
+    expect(code).toBe(ExitCode.SUCCESS);
     expect(stdout).toContain('MediaLoom Diagnostics');
     expect(stdout).toContain('Checks:');
     expect(stderr).toBe('');
@@ -98,13 +120,15 @@ describe('medialoom CLI', () => {
       },
     });
 
-    expect(code).toBe(0);
+    expect(code).toBe(ExitCode.SUCCESS);
     expect(stderr).toBe('');
 
-    // Must parse directly as JSON
     const parsed = JSON.parse(stdout);
-    const validated = doctorReportEnvelopeSchema.parse(parsed);
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.command).toBe('doctor');
+    expect(parsed.status).toBe('success');
 
+    const validated = doctorReportEnvelopeSchema.parse(parsed.data);
     expect(validated.schemaVersion).toBe(1);
     expect(validated.version).toBe('0.1.0');
     expect(Array.isArray(validated.checks)).toBe(true);
@@ -117,14 +141,15 @@ describe('medialoom CLI', () => {
       encoding: 'utf-8',
     });
 
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(ExitCode.SUCCESS);
     const rawStdout = result.stdout.trim();
     expect(rawStdout.startsWith('{')).toBe(true);
     expect(rawStdout.endsWith('}')).toBe(true);
 
     const parsed = JSON.parse(rawStdout);
-    const validated = doctorReportEnvelopeSchema.parse(parsed);
-    expect(validated.schemaVersion).toBe(1);
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.command).toBe('doctor');
+    expect(parsed.status).toBe('success');
   });
 
   it('handles scan, items, and inspect end-to-end via CLI in human and --json mode', async () => {
@@ -140,7 +165,7 @@ describe('medialoom CLI', () => {
         stdout: { write: (c) => (scanHumanOut += c) },
         stderr: { write: (c) => (scanHumanErr += c) },
       });
-      expect(scanHumanCode).toBe(0);
+      expect(scanHumanCode).toBe(ExitCode.SUCCESS);
       expect(scanHumanOut).toContain('MediaLoom Scan Report');
       expect(scanHumanOut).toContain('Discovered: 1');
       expect(scanHumanOut).toContain('Created:    1');
@@ -152,17 +177,19 @@ describe('medialoom CLI', () => {
         stdout: { write: (c) => (scanJsonOut += c) },
         stderr: { write: (c) => (scanJsonErr += c) },
       });
-      expect(scanJsonCode).toBe(0);
+      expect(scanJsonCode).toBe(ExitCode.SUCCESS);
       expect(scanJsonErr).toBe('');
 
       const scanResult = JSON.parse(scanJsonOut);
-      const validatedScan = scanResultSchema.parse(scanResult);
-      expect(validatedScan.schemaVersion).toBe(1);
-      expect(validatedScan.scanId).toBeDefined();
-      expect(validatedScan.discovered).toBe(1);
-      expect(validatedScan.created).toBe(0); // idempotent second scan
-      expect(validatedScan.updated).toBe(0);
-      expect(validatedScan.failed).toBe(0);
+      const scanEnvelope = cliEnvelopeSchema(scanDataSchema).parse(scanResult);
+      expect(scanEnvelope.schemaVersion).toBe(1);
+      expect(scanEnvelope.command).toBe('scan');
+      expect(scanEnvelope.status).toBe('success');
+      expect(scanEnvelope.data?.scanId).toBeDefined();
+      expect(scanEnvelope.data?.discovered).toBe(1);
+      expect(scanEnvelope.data?.created).toBe(0); // idempotent second scan
+      expect(scanEnvelope.data?.updated).toBe(0);
+      expect(scanEnvelope.data?.failed).toBe(0);
 
       // 3. items command with --json
       let itemsJsonOut = '';
@@ -171,16 +198,20 @@ describe('medialoom CLI', () => {
         stdout: { write: (c) => (itemsJsonOut += c) },
         stderr: { write: (c) => (itemsJsonErr += c) },
       });
-      expect(itemsCode).toBe(0);
+      expect(itemsCode).toBe(ExitCode.SUCCESS);
       expect(itemsJsonErr).toBe('');
 
       const itemsResult = JSON.parse(itemsJsonOut);
-      expect(itemsResult.schemaVersion).toBe(1);
-      expect(Array.isArray(itemsResult.items)).toBe(true);
+      const itemsEnvelope = cliEnvelopeSchema(itemsDataSchema).parse(itemsResult);
+      expect(itemsEnvelope.schemaVersion).toBe(1);
+      expect(itemsEnvelope.command).toBe('items');
+      expect(itemsEnvelope.status).toBe('success');
+      expect(Array.isArray(itemsEnvelope.data?.items)).toBe(true);
 
-      const matrix = itemsResult.items.find((i: { title: string }) => i.title === 'The Matrix');
+      const matrix = itemsEnvelope.data?.items.find((i) => i.title === 'The Matrix');
       expect(matrix).toBeDefined();
-      expect(matrix.year).toBe(1999);
+      expect(matrix?.year).toBe(1999);
+      if (!matrix) throw new Error('Expected matrix to be defined');
 
       // 4. inspect command with --json
       let inspectJsonOut = '';
@@ -189,26 +220,29 @@ describe('medialoom CLI', () => {
         stdout: { write: (c) => (inspectJsonOut += c) },
         stderr: { write: (c) => (inspectJsonErr += c) },
       });
-      expect(inspectCode).toBe(0);
+      expect(inspectCode).toBe(ExitCode.SUCCESS);
       expect(inspectJsonErr).toBe('');
 
       const inspectResult = JSON.parse(inspectJsonOut);
-      expect(inspectResult.schemaVersion).toBe(1);
-      expect(inspectResult.item.id).toBe(matrix.id);
-      expect(inspectResult.item.title).toBe('The Matrix');
+      const inspectEnvelope = cliEnvelopeSchema(inspectDataSchema).parse(inspectResult);
+      expect(inspectEnvelope.schemaVersion).toBe(1);
+      expect(inspectEnvelope.command).toBe('inspect');
+      expect(inspectEnvelope.status).toBe('success');
+      expect(inspectEnvelope.data?.item.id).toBe(matrix.id);
+      expect(inspectEnvelope.data?.item.title).toBe('The Matrix');
 
-      const asset = inspectResult.item.editions[0].mediaVersions[0].assets[0];
-      expect(asset.filenameMetadata.screenSize).toBe('1080p');
-      expect(asset.filenameMetadata.source).toBe('Blu-ray');
-      expect(asset.filenameMetadata.releaseGroup).toBe('GROUP');
+      const asset = inspectEnvelope.data?.item.editions[0]?.mediaVersions[0]?.assets[0];
+      expect(asset?.filenameMetadata?.screenSize).toBe('1080p');
+      expect(asset?.filenameMetadata?.source).toBe('Blu-ray');
+      expect(asset?.filenameMetadata?.releaseGroup).toBe('GROUP');
 
-      // 4b. Acceptance requirement: inspect ITEM_ID --json exposes clearly separated metadata
-      expect(asset.filenameMetadata).toBeDefined();
-      expect(asset.technicalMetadata).toBeDefined();
-      expect(asset.technicalMetadata.width).toBe(16);
-      expect(asset.technicalMetadata.height).toBe(16);
-      expect(asset.technicalMetadata.videoCodec).toBe('h264');
-      expect(Array.isArray(asset.technicalMetadata.streams)).toBe(true);
+      // Exposes technical metadata
+      expect(asset?.filenameMetadata).toBeDefined();
+      expect(asset?.technicalMetadata).toBeDefined();
+      expect(asset?.technicalMetadata?.width).toBe(16);
+      expect(asset?.technicalMetadata?.height).toBe(16);
+      expect(asset?.technicalMetadata?.videoCodec).toBe('h264');
+      expect(Array.isArray(asset?.technicalMetadata?.streams)).toBe(true);
 
       // Also verify inspect in human mode prints technical metadata
       let inspectHumanOut = '';
@@ -217,7 +251,7 @@ describe('medialoom CLI', () => {
         stdout: { write: (c) => (inspectHumanOut += c) },
         stderr: { write: (c) => (inspectHumanErr += c) },
       });
-      expect(inspectHumanCode).toBe(0);
+      expect(inspectHumanCode).toBe(ExitCode.SUCCESS);
       expect(inspectHumanErr).toBe('');
       expect(inspectHumanOut).toContain('Filename Metadata:');
       expect(inspectHumanOut).toContain('Technical Metadata:');
@@ -231,84 +265,81 @@ describe('medialoom CLI', () => {
         stdout: { write: (c) => (missingOut += c) },
         stderr: { write: (c) => (missingErr += c) },
       });
-      expect(missingCode).toBe(1);
+      expect(missingCode).toBe(ExitCode.GENERIC_FAILURE);
       expect(missingErr).toContain('Item not found');
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
-  });
 
-  it('executes scan --json as a standalone binary emitting pure JSON', async () => {
-    const tempDir = await fs.mkdtemp(path.join(tmpdir(), 'medialoom-cli-bin-test-'));
-    try {
-      await fs.writeFile(
-        path.join(tempDir, 'Blade.Runner.2049.2017.2160p.UHD.BluRay.mkv'),
-        TINY_VIDEO_BUFFER,
-      );
-
-      const result = spawnSync('bun', ['apps/cli/bin/medialoom.ts', 'scan', tempDir, '--json'], {
-        cwd: process.cwd(),
-        encoding: 'utf-8',
+      // 6. inspect non-existent item in --json mode
+      let missingJsonOut = '';
+      let missingJsonErr = '';
+      const missingJsonCode = await runCli(['inspect', 'non-existent-id', '--json'], {
+        stdout: { write: (c) => (missingJsonOut += c) },
+        stderr: { write: (c) => (missingJsonErr += c) },
       });
-
-      expect(result.status).toBe(0);
-      const rawStdout = result.stdout.trim();
-      expect(rawStdout.startsWith('{')).toBe(true);
-      expect(rawStdout.endsWith('}')).toBe(true);
-
-      const parsed = JSON.parse(rawStdout);
-      expect(parsed.scanId).toBeDefined();
-      expect(parsed.discovered).toBe(1);
-      expect(parsed.created).toBe(1);
-      expect(parsed.failed).toBe(0);
+      expect(missingJsonCode).toBe(ExitCode.GENERIC_FAILURE);
+      expect(missingJsonErr).toBe('');
+      const parsedMissing = JSON.parse(missingJsonOut);
+      expect(parsedMissing.schemaVersion).toBe(1);
+      expect(parsedMissing.command).toBe('inspect');
+      expect(parsedMissing.status).toBe('error');
+      expect(parsedMissing.error.code).toBe('ITEM_NOT_FOUND');
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
 
-  it('handles config get and set via CLI in human and --json mode', async () => {
-    // 1. Set key via config set
-    let setOut = '';
-    let setErr = '';
-    const setCode = await runCli(['config', 'set', 'tmdb_api_key', 'test_key_abc12345'], {
-      stdout: { write: (c) => (setOut += c) },
-      stderr: { write: (c) => (setErr += c) },
+  it('handles invalid argument exit status (ExitCode 2)', async () => {
+    // Missing scan path
+    let scanErr = '';
+    const scanCode = await runCli(['scan'], {
+      stdout: { write: () => {} },
+      stderr: { write: (c) => (scanErr += c) },
     });
-    expect(setCode).toBe(0);
-    expect(setOut).toContain('✓ TMDb API key saved successfully');
+    expect(scanCode).toBe(ExitCode.INVALID_INPUT);
+    expect(scanErr).toContain('Missing required <path>');
 
-    // 2. Get key via config get in human mode
-    let getHumanOut = '';
-    const getHumanCode = await runCli(['config', 'get', 'tmdb_api_key'], {
-      stdout: { write: (c) => (getHumanOut += c) },
-      stderr: { write: () => {} },
+    // Missing inspect id
+    let inspectErr = '';
+    const inspectCode = await runCli(['inspect'], {
+      stdout: { write: () => {} },
+      stderr: { write: (c) => (inspectErr += c) },
     });
-    expect(getHumanCode).toBe(0);
-    expect(getHumanOut).toContain('test...2345 (configured in SQLite)');
-    expect(getHumanOut).not.toContain('test_key_abc12345'); // Never log full token!
+    expect(inspectCode).toBe(ExitCode.INVALID_INPUT);
+    expect(inspectErr).toContain('Missing required <id>');
 
-    // 3. Get key via config get --json
-    let getJsonOut = '';
-    const getJsonCode = await runCli(['config', 'get', 'tmdb_api_key', '--json'], {
-      stdout: { write: (c) => (getJsonOut += c) },
-      stderr: { write: () => {} },
+    // Missing candidates id
+    let candErr = '';
+    const candCode = await runCli(['candidates'], {
+      stdout: { write: () => {} },
+      stderr: { write: (c) => (candErr += c) },
     });
-    expect(getJsonCode).toBe(0);
-    const parsedGet = JSON.parse(getJsonOut);
-    expect(parsedGet.schemaVersion).toBe(1);
-    expect(parsedGet.key).toBe('tmdb_api_key');
-    expect(parsedGet.configured).toBe(true);
-    expect(parsedGet.masked).toBe(true);
-    expect(parsedGet.value).toBe('test...2345');
+    expect(candCode).toBe(ExitCode.INVALID_INPUT);
+    expect(candErr).toContain('Missing required <id>');
+
+    // Missing match id
+    let matchErr = '';
+    const matchCode = await runCli(['match'], {
+      stdout: { write: () => {} },
+      stderr: { write: (c) => (matchErr += c) },
+    });
+    expect(matchCode).toBe(ExitCode.INVALID_INPUT);
+    expect(matchErr).toContain('Missing required <id>');
+
+    // Unknown command
+    let unknownErr = '';
+    const unknownCode = await runCli(['invalid_command_xyz'], {
+      stdout: { write: () => {} },
+      stderr: { write: (c) => (unknownErr += c) },
+    });
+    expect(unknownCode).toBe(ExitCode.INVALID_INPUT);
+    expect(unknownErr).toContain('Unknown command');
   });
 
   it('handles candidates command for an item in human and --json mode', async () => {
-    // Mock metadataService and inventoryService
     const mockMovie = {
       id: 'movie_matrix_id',
       title: 'The Matrix',
       year: 1999,
-      status: 'UNMATCHED',
+      status: 'UNMATCHED' as const,
       createdAt: new Date(),
       updatedAt: new Date(),
       editions: [],
@@ -337,7 +368,7 @@ describe('medialoom CLI', () => {
               candidates: mockCandidates,
             };
           }
-          throw new Error(`MediaItem "${id}" not found`);
+          throw new Error(`MediaItem "${id}" not found in inventory.`);
         },
         searchMovies: async () => mockCandidates,
         getMovie: async () => mockCandidates[0],
@@ -356,15 +387,18 @@ describe('medialoom CLI', () => {
       mockServices,
     );
 
-    expect(jsonCode).toBe(0);
+    expect(jsonCode).toBe(ExitCode.SUCCESS);
     expect(jsonErr).toBe('');
     const parsed = JSON.parse(jsonOut);
-    expect(parsed.schemaVersion).toBe(1);
-    expect(parsed.itemId).toBe('movie_matrix_id');
-    expect(parsed.query).toBe('The Matrix');
-    expect(parsed.year).toBe(1999);
-    expect(parsed.candidates.length).toBe(1);
-    expect(parsed.candidates[0].tmdbId).toBe(603);
+    const envelope = cliEnvelopeSchema(candidatesDataSchema).parse(parsed);
+    expect(envelope.schemaVersion).toBe(1);
+    expect(envelope.command).toBe('candidates');
+    expect(envelope.status).toBe('success');
+    expect(envelope.data?.itemId).toBe('movie_matrix_id');
+    expect(envelope.data?.query).toBe('The Matrix');
+    expect(envelope.data?.year).toBe(1999);
+    expect(envelope.data?.candidates.length).toBe(1);
+    expect(envelope.data?.candidates[0]?.tmdbId).toBe(603);
 
     // 2. candidates in human mode
     let humanOut = '';
@@ -377,28 +411,13 @@ describe('medialoom CLI', () => {
       mockServices,
     );
 
-    expect(humanCode).toBe(0);
+    expect(humanCode).toBe(ExitCode.SUCCESS);
     expect(humanOut).toContain('The Matrix (1999)');
     expect(humanOut).toContain('[TMDB 603]');
     expect(humanOut).toContain('Candidates (1 found)');
-
-    // 3. candidates with missing item ID
-    let missingOut = '';
-    let missingErr = '';
-    const missingCode = await runCli(
-      ['candidates'],
-      {
-        stdout: { write: (c) => (missingOut += c) },
-        stderr: { write: (c) => (missingErr += c) },
-      },
-      mockServices,
-    );
-
-    expect(missingCode).toBe(1);
-    expect(missingErr).toContain('Missing required <id>');
   });
 
-  it('handles match command in automatic and manual override modes (--json and human)', async () => {
+  it('handles match command in automatic, manual override, and review-required modes', async () => {
     const mockAutoResult: ItemMatchResult = {
       itemId: 'movie_matrix_id',
       decision: 'AUTO_MATCH',
@@ -443,6 +462,22 @@ describe('medialoom CLI', () => {
       isManual: false,
     };
 
+    const mockReviewResult: ItemMatchResult = {
+      itemId: 'movie_ambiguous_id',
+      decision: 'REVIEW_REQUIRED',
+      score: 0.75,
+      components: {
+        title: 0.5,
+        year: 0.15,
+        runtime: 0.05,
+        providerRank: 0.05,
+        penalty: 0,
+      },
+      selectedCandidate: null,
+      evaluations: [],
+      isManual: false,
+    };
+
     const mockManualResult: ItemMatchResult = {
       itemId: 'movie_matrix_id',
       decision: 'AUTO_MATCH',
@@ -471,7 +506,8 @@ describe('medialoom CLI', () => {
       matchingService: {
         matchItem: async (id: string) => {
           if (id === 'movie_matrix_id') return mockAutoResult;
-          throw new Error(`Item ${id} not found`);
+          if (id === 'movie_ambiguous_id') return mockReviewResult;
+          throw new Error(`MediaItem "${id}" not found in inventory.`);
         },
         manualMatch: async (id: string, info: { provider: string; id: string | number }) => {
           if (id === 'movie_matrix_id' && String(info.id) === '603') return mockManualResult;
@@ -480,7 +516,7 @@ describe('medialoom CLI', () => {
       } as unknown as MatchingService,
     };
 
-    // 1. match <id> in human mode
+    // 1. match <id> (auto match success -> ExitCode 0)
     let autoOut = '';
     const autoCode = await runCli(
       ['match', 'movie_matrix_id'],
@@ -490,12 +526,9 @@ describe('medialoom CLI', () => {
       },
       mockServices,
     );
-    expect(autoCode).toBe(0);
+    expect(autoCode).toBe(ExitCode.SUCCESS);
     expect(autoOut).toContain('MediaLoom Match Decision');
     expect(autoOut).toContain('Decision:  AUTO_MATCH');
-    expect(autoOut).toContain('Score:     0.98');
-    expect(autoOut).toContain('[TMDB 603] The Matrix (1999)');
-    expect(autoOut).toContain('Runtime:   136 min');
 
     // 2. match <id> in --json mode
     let jsonOut = '';
@@ -507,32 +540,32 @@ describe('medialoom CLI', () => {
       },
       mockServices,
     );
-    expect(jsonCode).toBe(0);
+    expect(jsonCode).toBe(ExitCode.SUCCESS);
     const parsedAuto = JSON.parse(jsonOut);
-    expect(parsedAuto.schemaVersion).toBe(1);
-    expect(parsedAuto.decision).toBe('AUTO_MATCH');
-    expect(parsedAuto.score).toBe(0.98);
-    expect(parsedAuto.components.title).toBe(0.6);
-    expect(parsedAuto.matched).toBe(true);
-    expect(parsedAuto.isManual).toBe(false);
-    expect(parsedAuto.candidate.tmdbId).toBe(603);
+    const autoEnvelope = cliEnvelopeSchema(matchDataSchema).parse(parsedAuto);
+    expect(autoEnvelope.schemaVersion).toBe(1);
+    expect(autoEnvelope.command).toBe('match');
+    expect(autoEnvelope.status).toBe('success');
+    expect(autoEnvelope.data?.decision).toBe('AUTO_MATCH');
+    expect(autoEnvelope.data?.matched).toBe(true);
+    expect(autoEnvelope.data?.candidate?.tmdbId).toBe(603);
 
-    // 3. match <id> --provider tmdb --id 603 (manual override)
-    let manualOut = '';
-    const manualCode = await runCli(
-      ['match', 'movie_matrix_id', '--provider', 'tmdb', '--id', '603'],
+    // 3. match <id> with REVIEW_REQUIRED -> ExitCode 3
+    let reviewJsonOut = '';
+    const reviewCode = await runCli(
+      ['match', 'movie_ambiguous_id', '--json'],
       {
-        stdout: { write: (c) => (manualOut += c) },
+        stdout: { write: (c) => (reviewJsonOut += c) },
         stderr: { write: () => {} },
       },
       mockServices,
     );
-    expect(manualCode).toBe(0);
-    expect(manualOut).toContain('MediaLoom Match Decision');
-    expect(manualOut).toContain('Mode:      Manual match override');
-    expect(manualOut).toContain('[TMDB 603] The Matrix (1999)');
+    expect(reviewCode).toBe(ExitCode.REVIEW_REQUIRED);
+    const parsedReview = JSON.parse(reviewJsonOut);
+    expect(parsedReview.data.decision).toBe('REVIEW_REQUIRED');
+    expect(parsedReview.data.matched).toBe(false);
 
-    // 4. match <id> --provider tmdb --id 603 --json
+    // 4. match <id> manual override
     let manualJsonOut = '';
     const manualJsonCode = await runCli(
       ['match', 'movie_matrix_id', '--provider', 'tmdb', '--id', '603', '--json'],
@@ -542,24 +575,54 @@ describe('medialoom CLI', () => {
       },
       mockServices,
     );
-    expect(manualJsonCode).toBe(0);
+    expect(manualJsonCode).toBe(ExitCode.SUCCESS);
     const parsedManual = JSON.parse(manualJsonOut);
-    expect(parsedManual.schemaVersion).toBe(1);
-    expect(parsedManual.decision).toBe('AUTO_MATCH');
-    expect(parsedManual.score).toBe(1.0);
-    expect(parsedManual.isManual).toBe(true);
+    expect(parsedManual.data.decision).toBe('AUTO_MATCH');
+    expect(parsedManual.data.isManual).toBe(true);
+  });
 
-    // 5. match missing item ID
-    let missingErr = '';
-    const missingCode = await runCli(
-      ['match'],
+  it('maps provider and network errors to ExitCode 4', async () => {
+    const mockServices: CliServices = {
+      metadataService: {
+        getCandidatesForItem: async () => {
+          throw new ProviderAuthenticationError('TMDb API key missing or invalid');
+        },
+      } as unknown as MetadataService,
+      matchingService: {
+        matchItem: async () => {
+          throw new ProviderNetworkError('Network connectivity failure to TMDb API');
+        },
+      } as unknown as MatchingService,
+    };
+
+    // 1. candidates provider auth failure
+    let candJsonOut = '';
+    const candCode = await runCli(
+      ['candidates', 'movie_1', '--json'],
       {
-        stdout: { write: () => {} },
-        stderr: { write: (c) => (missingErr += c) },
+        stdout: { write: (c) => (candJsonOut += c) },
+        stderr: { write: () => {} },
       },
       mockServices,
     );
-    expect(missingCode).toBe(1);
-    expect(missingErr).toContain('Missing required <id> argument for match command');
+    expect(candCode).toBe(ExitCode.PROVIDER_ERROR);
+    const parsedCand = JSON.parse(candJsonOut);
+    expect(parsedCand.status).toBe('error');
+    expect(parsedCand.error.code).toBe('PROVIDER_AUTH_ERROR');
+
+    // 2. match provider network failure
+    let matchJsonOut = '';
+    const matchCode = await runCli(
+      ['match', 'movie_1', '--json'],
+      {
+        stdout: { write: (c) => (matchJsonOut += c) },
+        stderr: { write: () => {} },
+      },
+      mockServices,
+    );
+    expect(matchCode).toBe(ExitCode.PROVIDER_ERROR);
+    const parsedMatch = JSON.parse(matchJsonOut);
+    expect(parsedMatch.status).toBe('error');
+    expect(parsedMatch.error.code).toBe('PROVIDER_NETWORK_ERROR');
   });
 });

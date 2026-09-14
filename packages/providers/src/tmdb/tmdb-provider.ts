@@ -46,7 +46,7 @@ export class TmdbMovieProvider implements MovieMetadataProvider {
       /\/+$/,
       '',
     );
-    this.fetchFn = options.fetchFn ?? globalThis.fetch.bind(globalThis);
+    this.fetchFn = options.fetchFn ?? ((input, init) => globalThis.fetch(input, init));
   }
 
   private async resolveApiKey(): Promise<string> {

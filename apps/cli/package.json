@@ -13,7 +13,8 @@
   "dependencies": {
     "@medialoom/contracts": "workspace:*",
     "@medialoom/config": "workspace:*",
-    "@medialoom/core": "workspace:*"
+    "@medialoom/core": "workspace:*",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@medialoom/media": "workspace:*"
