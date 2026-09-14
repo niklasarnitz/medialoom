@@ -6,5 +6,9 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "tsc"
+  },
+  "dependencies": {
+    "@medialoom/contracts": "workspace:*",
+    "guessit-js": "^4.7.1"
   }
 }
