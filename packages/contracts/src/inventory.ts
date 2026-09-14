@@ -40,7 +40,8 @@ export const createAssetInputSchema = z.object({
   mtime: z.coerce.date(),
   present: z.boolean().default(true),
 });
-export type CreateAssetInput = z.infer<typeof createAssetInputSchema>;
+export type CreateAssetInput = z.input<typeof createAssetInputSchema>;
+export type CreateAssetOutput = z.output<typeof createAssetInputSchema>;
 
 export const updateAssetInputSchema = z.object({
   mediaItemId: z.string().min(1).optional(),
@@ -50,7 +51,7 @@ export const updateAssetInputSchema = z.object({
   mtime: z.coerce.date().optional(),
   present: z.boolean().optional(),
 });
-export type UpdateAssetInput = z.infer<typeof updateAssetInputSchema>;
+export type UpdateAssetInput = z.input<typeof updateAssetInputSchema>;
 
 // ============================================================================
 // Movie Contracts
@@ -80,7 +81,7 @@ export const createMovieInputSchema = z.object({
   tmdbId: z.number().int().positive().nullable().optional(),
   imdbId: z.string().nullable().optional(),
 });
-export type CreateMovieInput = z.infer<typeof createMovieInputSchema>;
+export type CreateMovieInput = z.input<typeof createMovieInputSchema>;
 
 export const updateMovieInputSchema = z.object({
   title: z.string().min(1).optional(),
@@ -91,7 +92,7 @@ export const updateMovieInputSchema = z.object({
   tmdbId: z.number().int().positive().nullable().optional(),
   imdbId: z.string().nullable().optional(),
 });
-export type UpdateMovieInput = z.infer<typeof updateMovieInputSchema>;
+export type UpdateMovieInput = z.input<typeof updateMovieInputSchema>;
 
 // ============================================================================
 // MediaItem Contracts
@@ -128,14 +129,15 @@ export const createMediaItemInputSchema = z.object({
   status: mediaItemStatusSchema.default('UNMATCHED'),
   matchConfidence: z.number().min(0).max(1).nullable().optional(),
 });
-export type CreateMediaItemInput = z.infer<typeof createMediaItemInputSchema>;
+export type CreateMediaItemInput = z.input<typeof createMediaItemInputSchema>;
+export type CreateMediaItemOutput = z.output<typeof createMediaItemInputSchema>;
 
 export const updateMediaItemInputSchema = z.object({
   movieId: z.string().nullable().optional(),
   status: mediaItemStatusSchema.optional(),
   matchConfidence: z.number().min(0).max(1).nullable().optional(),
 });
-export type UpdateMediaItemInput = z.infer<typeof updateMediaItemInputSchema>;
+export type UpdateMediaItemInput = z.input<typeof updateMediaItemInputSchema>;
 
 // ============================================================================
 // Scan Contracts
@@ -165,7 +167,8 @@ export const createScanInputSchema = z.object({
   rootPath: z.string().min(1),
   status: scanStatusSchema.default('RUNNING'),
 });
-export type CreateScanInput = z.infer<typeof createScanInputSchema>;
+export type CreateScanInput = z.input<typeof createScanInputSchema>;
+export type CreateScanOutput = z.output<typeof createScanInputSchema>;
 
 export const completeScanInputSchema = z.object({
   discoveredCount: z.number().int().nonnegative().optional(),
@@ -173,7 +176,7 @@ export const completeScanInputSchema = z.object({
   updatedCount: z.number().int().nonnegative().optional(),
   failedCount: z.number().int().nonnegative().optional(),
 });
-export type CompleteScanInput = z.infer<typeof completeScanInputSchema>;
+export type CompleteScanInput = z.input<typeof completeScanInputSchema>;
 
 export const failScanInputSchema = z.object({
   errorMessage: z.string().min(1),
@@ -182,4 +185,4 @@ export const failScanInputSchema = z.object({
   updatedCount: z.number().int().nonnegative().optional(),
   failedCount: z.number().int().nonnegative().optional(),
 });
-export type FailScanInput = z.infer<typeof failScanInputSchema>;
+export type FailScanInput = z.input<typeof failScanInputSchema>;
