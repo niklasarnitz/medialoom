@@ -44,6 +44,10 @@ Personal media collections may be mounted at:
 
 **STRICT SAFETY RULE:** NEVER edit, write to, move, rename, or delete anything in `/Volumes/Movies` or `/Volumes/Series`. Treat these paths as strictly read-only.
 
+**Testing & Validation:**
+Use these paths for read-only testing of scanning, parsing, and matching against real-world media libraries:
+* In particular, *Apocalypse Now* and *The Lord of the Rings* on `/Volumes/Movies` feature multiple versions/editions, serving as prime test cases for multi-edition detection and matching logic.
+
 ## Before completion
 
 Run the repository equivalents of:
