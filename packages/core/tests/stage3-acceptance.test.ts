@@ -60,7 +60,8 @@ describe('Stage 3 Acceptance Test', () => {
     expect(matrixItem?.year).toBe(1999);
 
     // 4. Retrieve item and inspect full hierarchy
-    const inspected = await service.getItem(matrixItem!.id);
+    if (!matrixItem) throw new Error('Expected matrixItem to be defined');
+    const inspected = await service.getItem(matrixItem.id);
     expect(inspected).not.toBeNull();
     expect(inspected?.editions).toHaveLength(1);
 
@@ -74,14 +75,15 @@ describe('Stage 3 Acceptance Test', () => {
     const canonicalFixturePath = await fs.realpath(fixturePath);
     expect(asset?.path).toBe(canonicalFixturePath);
     expect(asset?.present).toBe(true);
-    expect(asset?.sizeBytes).toBe(beforeStat.size);
+    expect(asset?.sizeBytes).toBe(BigInt(beforeStat.size));
 
     // Technical metadata must not be present yet (ffprobe is deferred to future stage)
     expect(asset?.technicalMetadata).toBeNull();
 
     // Normalized filename metadata must match specification
     expect(asset?.filenameMetadata).not.toBeNull();
-    const fn = asset!.filenameMetadata!;
+    const fn = asset?.filenameMetadata;
+    if (!fn) throw new Error('Expected filenameMetadata to be defined');
     expect(fn.title).toBe('The Matrix');
     expect(fn.year).toBe(1999);
     expect(fn.screenSize).toBe('1080p');
@@ -92,7 +94,7 @@ describe('Stage 3 Acceptance Test', () => {
 
     // Verify raw JSON diagnostics retention
     expect(fn.rawJson).toBeDefined();
-    const raw = JSON.parse(fn.rawJson!);
+    const raw = JSON.parse(fn.rawJson ?? '{}');
     expect(raw.screen_size).toBe('1080p');
     expect(raw.release_group).toBe('GROUP');
   });

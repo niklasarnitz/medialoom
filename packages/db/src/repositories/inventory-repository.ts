@@ -1,14 +1,20 @@
+import type {
+  CompleteScanInput,
+  CreateAssetInput,
+  CreateEditionInput,
+  CreateMediaFilenameMetadataInput,
+  CreateMediaTechnicalMetadataInput,
+  CreateMediaVersionInput,
+  CreateMovieInput,
+  CreateScanInput,
+  FailScanInput,
+  MovieStatus,
+  UpdateAssetInput,
+  UpdateEditionInput,
+  UpdateMediaVersionInput,
+  UpdateMovieInput,
+} from '@medialoom/contracts';
 import {
-  type AssetWithTechnicalMetadata,
-  assetWithTechnicalMetadataSchema,
-  type CompleteScanInput,
-  type CreateAssetInput,
-  type CreateEditionInput,
-  type CreateMediaFilenameMetadataInput,
-  type CreateMediaTechnicalMetadataInput,
-  type CreateMediaVersionInput,
-  type CreateMovieInput,
-  type CreateScanInput,
   completeScanInputSchema,
   createAssetInputSchema,
   createEditionInputSchema,
@@ -17,224 +23,69 @@ import {
   createMediaVersionInputSchema,
   createMovieInputSchema,
   createScanInputSchema,
-  type Edition,
-  type EditionWithVersions,
-  editionSchema,
-  editionWithVersionsSchema,
-  type FailScanInput,
   failScanInputSchema,
-  type MediaFilenameMetadata,
-  type MediaTechnicalMetadata,
-  type MediaVersion,
-  type MediaVersionWithAssets,
-  type Movie,
-  type MovieStatus,
-  type MovieWithEditions,
-  mediaFilenameMetadataSchema,
-  mediaTechnicalMetadataSchema,
-  mediaVersionSchema,
-  mediaVersionWithAssetsSchema,
-  movieSchema,
-  movieWithEditionsSchema,
-  type Scan,
-  scanSchema,
-  type UpdateAssetInput,
-  type UpdateEditionInput,
-  type UpdateMediaFilenameMetadataInput,
-  type UpdateMediaVersionInput,
-  type UpdateMovieInput,
   updateAssetInputSchema,
   updateEditionInputSchema,
-  updateMediaFilenameMetadataInputSchema,
   updateMediaVersionInputSchema,
   updateMovieInputSchema,
 } from '@medialoom/contracts';
 import type {
-  Asset as PrismaAsset,
+  Edition,
+  MediaFilenameMetadata,
+  MediaTechnicalMetadata,
+  MediaVersion,
+  Movie,
+  Prisma,
   PrismaClient,
-  Edition as PrismaEdition,
-  MediaFilenameMetadata as PrismaMediaFilenameMetadata,
-  MediaTechnicalMetadata as PrismaMediaTechnicalMetadata,
-  MediaVersion as PrismaMediaVersion,
-  Movie as PrismaMovie,
-  Scan as PrismaScan,
+  Scan,
 } from '@prisma/client';
 import { getPrismaClient } from '../client';
 import { canonicalizeAssetPath } from '../utils/path';
 
-function mapPrismaTechnicalMetadataToDomain(
-  record: PrismaMediaTechnicalMetadata,
-): MediaTechnicalMetadata {
-  return mediaTechnicalMetadataSchema.parse({
-    id: record.id,
-    assetId: record.assetId,
-    container: record.container,
-    formatName: record.formatName,
-    durationSeconds: record.durationSeconds,
-    bitRate: record.bitRate ? Number(record.bitRate) : null,
-    width: record.width,
-    height: record.height,
-    videoCodec: record.videoCodec,
-    audioCodec: record.audioCodec,
-    audioChannels: record.audioChannels,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  });
-}
+export const assetIncludeRelations = {
+  technicalMetadata: true,
+  filenameMetadata: true,
+} as const;
 
-function mapPrismaFilenameMetadataToDomain(
-  record: PrismaMediaFilenameMetadata,
-): MediaFilenameMetadata {
-  return mediaFilenameMetadataSchema.parse({
-    id: record.id,
-    assetId: record.assetId,
-    title: record.title,
-    year: record.year,
-    type: record.type,
-    edition: record.edition,
-    screenSize: record.screenSize,
-    source: record.source,
-    videoCodec: record.videoCodec,
-    audioCodec: record.audioCodec,
-    audioChannels: record.audioChannels,
-    releaseGroup: record.releaseGroup,
-    streamingService: record.streamingService,
-    container: record.container,
-    language: record.language,
-    rawJson: record.rawJson,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  });
-}
-
-function mapPrismaAssetToDomain(
-  record: PrismaAsset & {
-    technicalMetadata?: PrismaMediaTechnicalMetadata | null;
-    filenameMetadata?: PrismaMediaFilenameMetadata | null;
+export const mediaVersionIncludeHierarchy = {
+  assets: {
+    include: assetIncludeRelations,
   },
-): AssetWithTechnicalMetadata {
-  return assetWithTechnicalMetadataSchema.parse({
-    id: record.id,
-    mediaVersionId: record.mediaVersionId,
-    type: record.type,
-    path: record.path,
-    sizeBytes: Number(record.sizeBytes),
-    mtime: record.mtime,
-    present: record.present,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    technicalMetadata: record.technicalMetadata
-      ? mapPrismaTechnicalMetadataToDomain(record.technicalMetadata)
-      : null,
-    filenameMetadata: record.filenameMetadata
-      ? mapPrismaFilenameMetadataToDomain(record.filenameMetadata)
-      : null,
-  });
-}
+} as const;
 
-function mapPrismaMediaVersionToDomain(
-  record: PrismaMediaVersion & {
-    assets?: (PrismaAsset & {
-      technicalMetadata?: PrismaMediaTechnicalMetadata | null;
-    })[];
+export const editionIncludeHierarchy = {
+  mediaVersions: {
+    include: mediaVersionIncludeHierarchy,
   },
-): MediaVersionWithAssets {
-  return mediaVersionWithAssetsSchema.parse({
-    id: record.id,
-    editionId: record.editionId,
-    name: record.name,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    assets: (record.assets ?? []).map(mapPrismaAssetToDomain),
-  });
-}
+} as const;
 
-function mapPrismaEditionToDomain(
-  record: PrismaEdition & {
-    mediaVersions?: (PrismaMediaVersion & {
-      assets?: (PrismaAsset & {
-        technicalMetadata?: PrismaMediaTechnicalMetadata | null;
-      })[];
-    })[];
+export const movieIncludeHierarchy = {
+  editions: {
+    include: editionIncludeHierarchy,
   },
-): EditionWithVersions {
-  return editionWithVersionsSchema.parse({
-    id: record.id,
-    movieId: record.movieId,
-    name: record.name,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    mediaVersions: (record.mediaVersions ?? []).map(mapPrismaMediaVersionToDomain),
-  });
-}
+} as const;
 
-function mapPrismaMovieToDomain(
-  record: PrismaMovie & {
-    editions?: (PrismaEdition & {
-      mediaVersions?: (PrismaMediaVersion & {
-        assets?: (PrismaAsset & {
-          technicalMetadata?: PrismaMediaTechnicalMetadata | null;
-        })[];
-      })[];
-    })[];
-  },
-): MovieWithEditions {
-  return movieWithEditionsSchema.parse({
-    id: record.id,
-    title: record.title,
-    originalTitle: record.originalTitle,
-    year: record.year,
-    runtimeMinutes: record.runtimeMinutes,
-    overview: record.overview,
-    status: record.status,
-    matchConfidence: record.matchConfidence,
-    tmdbId: record.tmdbId,
-    imdbId: record.imdbId,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    editions: (record.editions ?? []).map(mapPrismaEditionToDomain),
-  });
-}
+export type MovieWithHierarchy = Prisma.MovieGetPayload<{
+  include: typeof movieIncludeHierarchy;
+}>;
 
-function mapPrismaScanToDomain(record: PrismaScan): Scan {
-  return scanSchema.parse({
-    id: record.id,
-    rootPath: record.rootPath,
-    status: record.status,
-    startedAt: record.startedAt,
-    completedAt: record.completedAt,
-    discoveredCount: record.discoveredCount,
-    createdCount: record.createdCount,
-    updatedCount: record.updatedCount,
-    failedCount: record.failedCount,
-    errorMessage: record.errorMessage,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  });
-}
+export type EditionWithHierarchy = Prisma.EditionGetPayload<{
+  include: typeof editionIncludeHierarchy;
+}>;
+
+export type MediaVersionWithHierarchy = Prisma.MediaVersionGetPayload<{
+  include: typeof mediaVersionIncludeHierarchy;
+}>;
+
+export type AssetWithRelations = Prisma.AssetGetPayload<{
+  include: typeof assetIncludeRelations;
+}>;
 
 export interface ListMoviesOptions {
   status?: MovieStatus;
   limit?: number;
   offset?: number;
 }
-
-const movieIncludeHierarchy = {
-  editions: {
-    include: {
-      mediaVersions: {
-        include: {
-          assets: {
-            include: {
-              technicalMetadata: true,
-              filenameMetadata: true,
-            },
-          },
-        },
-      },
-    },
-  },
-} as const;
 
 export class InventoryRepository {
   private prisma: PrismaClient;
@@ -249,7 +100,7 @@ export class InventoryRepository {
 
   async createScan(rawInput: CreateScanInput): Promise<Scan> {
     const input = createScanInputSchema.parse(rawInput);
-    const record = await this.prisma.scan.create({
+    return this.prisma.scan.create({
       data: {
         ...(input.id ? { id: input.id } : {}),
         rootPath: input.rootPath,
@@ -257,7 +108,6 @@ export class InventoryRepository {
         startedAt: new Date(),
       },
     });
-    return mapPrismaScanToDomain(record);
   }
 
   async completeScan(id: string, rawInput?: CompleteScanInput): Promise<Scan> {
@@ -267,7 +117,7 @@ export class InventoryRepository {
       throw new Error(`Scan with id "${id}" not found`);
     }
 
-    const record = await this.prisma.scan.update({
+    return this.prisma.scan.update({
       where: { id },
       data: {
         status: 'COMPLETED',
@@ -278,7 +128,6 @@ export class InventoryRepository {
         ...(input.failedCount !== undefined ? { failedCount: input.failedCount } : {}),
       },
     });
-    return mapPrismaScanToDomain(record);
   }
 
   async failScan(id: string, rawInput: FailScanInput): Promise<Scan> {
@@ -288,7 +137,7 @@ export class InventoryRepository {
       throw new Error(`Scan with id "${id}" not found`);
     }
 
-    const record = await this.prisma.scan.update({
+    return this.prisma.scan.update({
       where: { id },
       data: {
         status: 'FAILED',
@@ -300,12 +149,10 @@ export class InventoryRepository {
         ...(input.failedCount !== undefined ? { failedCount: input.failedCount } : {}),
       },
     });
-    return mapPrismaScanToDomain(record);
   }
 
   async getScan(id: string): Promise<Scan | null> {
-    const record = await this.prisma.scan.findUnique({ where: { id } });
-    return record ? mapPrismaScanToDomain(record) : null;
+    return this.prisma.scan.findUnique({ where: { id } });
   }
 
   // ==========================================================================
@@ -314,7 +161,7 @@ export class InventoryRepository {
 
   async createMovie(rawInput: CreateMovieInput): Promise<Movie> {
     const input = createMovieInputSchema.parse(rawInput);
-    const record = await this.prisma.movie.create({
+    return this.prisma.movie.create({
       data: {
         ...(input.id ? { id: input.id } : {}),
         title: input.title,
@@ -328,28 +175,25 @@ export class InventoryRepository {
         imdbId: input.imdbId ?? null,
       },
     });
-    return movieSchema.parse(record);
   }
 
   async updateMovie(id: string, rawInput: UpdateMovieInput): Promise<Movie> {
     const input = updateMovieInputSchema.parse(rawInput);
-    const record = await this.prisma.movie.update({
+    return this.prisma.movie.update({
       where: { id },
       data: input,
     });
-    return movieSchema.parse(record);
   }
 
-  async getMovie(id: string): Promise<MovieWithEditions | null> {
-    const record = await this.prisma.movie.findUnique({
+  async getMovie(id: string): Promise<MovieWithHierarchy | null> {
+    return this.prisma.movie.findUnique({
       where: { id },
       include: movieIncludeHierarchy,
     });
-    return record ? mapPrismaMovieToDomain(record) : null;
   }
 
-  async listMovies(options: ListMoviesOptions = {}): Promise<MovieWithEditions[]> {
-    const records = await this.prisma.movie.findMany({
+  async listMovies(options: ListMoviesOptions = {}): Promise<MovieWithHierarchy[]> {
+    return this.prisma.movie.findMany({
       where: {
         ...(options.status ? { status: options.status } : {}),
       },
@@ -358,15 +202,13 @@ export class InventoryRepository {
       skip: options.offset,
       orderBy: { createdAt: 'desc' },
     });
-    return records.map(mapPrismaMovieToDomain);
   }
 
-  async findMovieByTmdbId(tmdbId: number): Promise<MovieWithEditions | null> {
-    const record = await this.prisma.movie.findUnique({
+  async findMovieByTmdbId(tmdbId: number): Promise<MovieWithHierarchy | null> {
+    return this.prisma.movie.findUnique({
       where: { tmdbId },
       include: movieIncludeHierarchy,
     });
-    return record ? mapPrismaMovieToDomain(record) : null;
   }
 
   // ==========================================================================
@@ -375,62 +217,36 @@ export class InventoryRepository {
 
   async createEdition(rawInput: CreateEditionInput): Promise<Edition> {
     const input = createEditionInputSchema.parse(rawInput);
-    const record = await this.prisma.edition.create({
+    return this.prisma.edition.create({
       data: {
         ...(input.id ? { id: input.id } : {}),
         movieId: input.movieId,
         name: input.name ?? null,
       },
     });
-    return editionSchema.parse(record);
   }
 
   async updateEdition(id: string, rawInput: UpdateEditionInput): Promise<Edition> {
     const input = updateEditionInputSchema.parse(rawInput);
-    const record = await this.prisma.edition.update({
+    return this.prisma.edition.update({
       where: { id },
       data: input,
     });
-    return editionSchema.parse(record);
   }
 
-  async getEdition(id: string): Promise<EditionWithVersions | null> {
-    const record = await this.prisma.edition.findUnique({
+  async getEdition(id: string): Promise<EditionWithHierarchy | null> {
+    return this.prisma.edition.findUnique({
       where: { id },
-      include: {
-        mediaVersions: {
-          include: {
-            assets: {
-              include: {
-                technicalMetadata: true,
-                filenameMetadata: true,
-              },
-            },
-          },
-        },
-      },
+      include: editionIncludeHierarchy,
     });
-    return record ? mapPrismaEditionToDomain(record) : null;
   }
 
-  async getEditionsByMovieId(movieId: string): Promise<EditionWithVersions[]> {
-    const records = await this.prisma.edition.findMany({
+  async getEditionsByMovieId(movieId: string): Promise<EditionWithHierarchy[]> {
+    return this.prisma.edition.findMany({
       where: { movieId },
-      include: {
-        mediaVersions: {
-          include: {
-            assets: {
-              include: {
-                technicalMetadata: true,
-                filenameMetadata: true,
-              },
-            },
-          },
-        },
-      },
+      include: editionIncludeHierarchy,
       orderBy: { createdAt: 'asc' },
     });
-    return records.map(mapPrismaEditionToDomain);
   }
 
   // ==========================================================================
@@ -439,65 +255,47 @@ export class InventoryRepository {
 
   async createMediaVersion(rawInput: CreateMediaVersionInput): Promise<MediaVersion> {
     const input = createMediaVersionInputSchema.parse(rawInput);
-    const record = await this.prisma.mediaVersion.create({
+    return this.prisma.mediaVersion.create({
       data: {
         ...(input.id ? { id: input.id } : {}),
         editionId: input.editionId,
         name: input.name ?? null,
       },
     });
-    return mediaVersionSchema.parse(record);
   }
 
   async updateMediaVersion(id: string, rawInput: UpdateMediaVersionInput): Promise<MediaVersion> {
     const input = updateMediaVersionInputSchema.parse(rawInput);
-    const record = await this.prisma.mediaVersion.update({
+    return this.prisma.mediaVersion.update({
       where: { id },
       data: input,
     });
-    return mediaVersionSchema.parse(record);
   }
 
-  async getMediaVersion(id: string): Promise<MediaVersionWithAssets | null> {
-    const record = await this.prisma.mediaVersion.findUnique({
+  async getMediaVersion(id: string): Promise<MediaVersionWithHierarchy | null> {
+    return this.prisma.mediaVersion.findUnique({
       where: { id },
-      include: {
-        assets: {
-          include: {
-            technicalMetadata: true,
-            filenameMetadata: true,
-          },
-        },
-      },
+      include: mediaVersionIncludeHierarchy,
     });
-    return record ? mapPrismaMediaVersionToDomain(record) : null;
   }
 
-  async getMediaVersionsByEditionId(editionId: string): Promise<MediaVersionWithAssets[]> {
-    const records = await this.prisma.mediaVersion.findMany({
+  async getMediaVersionsByEditionId(editionId: string): Promise<MediaVersionWithHierarchy[]> {
+    return this.prisma.mediaVersion.findMany({
       where: { editionId },
-      include: {
-        assets: {
-          include: {
-            technicalMetadata: true,
-            filenameMetadata: true,
-          },
-        },
-      },
+      include: mediaVersionIncludeHierarchy,
       orderBy: { createdAt: 'asc' },
     });
-    return records.map(mapPrismaMediaVersionToDomain);
   }
 
   // ==========================================================================
   // Asset Operations
   // ==========================================================================
 
-  async createAsset(rawInput: CreateAssetInput): Promise<AssetWithTechnicalMetadata> {
+  async createAsset(rawInput: CreateAssetInput): Promise<AssetWithRelations> {
     const input = createAssetInputSchema.parse(rawInput);
     const canonicalPath = canonicalizeAssetPath(input.path);
 
-    const record = await this.prisma.asset.create({
+    return this.prisma.asset.create({
       data: {
         ...(input.id ? { id: input.id } : {}),
         mediaVersionId: input.mediaVersionId,
@@ -507,17 +305,14 @@ export class InventoryRepository {
         mtime: input.mtime,
         present: input.present,
       },
-      include: {
-        technicalMetadata: true,
-        filenameMetadata: true,
-      },
+      include: assetIncludeRelations,
     });
-    return mapPrismaAssetToDomain(record);
   }
 
-  async updateAsset(id: string, rawInput: UpdateAssetInput): Promise<AssetWithTechnicalMetadata> {
+  async updateAsset(id: string, rawInput: UpdateAssetInput): Promise<AssetWithRelations> {
     const input = updateAssetInputSchema.parse(rawInput);
-    const record = await this.prisma.asset.update({
+
+    return this.prisma.asset.update({
       where: { id },
       data: {
         ...(input.mediaVersionId !== undefined ? { mediaVersionId: input.mediaVersionId } : {}),
@@ -527,63 +322,44 @@ export class InventoryRepository {
         ...(input.mtime !== undefined ? { mtime: input.mtime } : {}),
         ...(input.present !== undefined ? { present: input.present } : {}),
       },
-      include: {
-        technicalMetadata: true,
-        filenameMetadata: true,
-      },
+      include: assetIncludeRelations,
     });
-    return mapPrismaAssetToDomain(record);
   }
 
-  async getAsset(id: string): Promise<AssetWithTechnicalMetadata | null> {
-    const record = await this.prisma.asset.findUnique({
+  async getAsset(id: string): Promise<AssetWithRelations | null> {
+    return this.prisma.asset.findUnique({
       where: { id },
-      include: {
-        technicalMetadata: true,
-        filenameMetadata: true,
-      },
+      include: assetIncludeRelations,
     });
-    return record ? mapPrismaAssetToDomain(record) : null;
   }
 
-  async getAssetByPath(rawPath: string): Promise<AssetWithTechnicalMetadata | null> {
+  async getAssetByPath(rawPath: string): Promise<AssetWithRelations | null> {
     const canonicalPath = canonicalizeAssetPath(rawPath);
-    const record = await this.prisma.asset.findUnique({
+    return this.prisma.asset.findUnique({
       where: { path: canonicalPath },
-      include: {
-        technicalMetadata: true,
-        filenameMetadata: true,
-      },
+      include: assetIncludeRelations,
     });
-    return record ? mapPrismaAssetToDomain(record) : null;
   }
 
-  async getAssetsByMediaVersionId(mediaVersionId: string): Promise<AssetWithTechnicalMetadata[]> {
-    const records = await this.prisma.asset.findMany({
+  async getAssetsByMediaVersionId(mediaVersionId: string): Promise<AssetWithRelations[]> {
+    return this.prisma.asset.findMany({
       where: { mediaVersionId },
-      include: {
-        technicalMetadata: true,
-        filenameMetadata: true,
-      },
+      include: assetIncludeRelations,
       orderBy: { createdAt: 'asc' },
     });
-    return records.map(mapPrismaAssetToDomain);
   }
 
-  async findAssetsByPathPrefix(prefix: string): Promise<AssetWithTechnicalMetadata[]> {
+  async findAssetsByPathPrefix(prefix: string): Promise<AssetWithRelations[]> {
     const canonicalPrefix = canonicalizeAssetPath(prefix);
-    const records = await this.prisma.asset.findMany({
+    return this.prisma.asset.findMany({
       where: {
         path: {
           startsWith: canonicalPrefix,
         },
       },
-      include: {
-        technicalMetadata: true,
-        filenameMetadata: true,
-      },
+      include: assetIncludeRelations,
+      orderBy: { path: 'asc' },
     });
-    return records.map(mapPrismaAssetToDomain);
   }
 
   // ==========================================================================
@@ -595,7 +371,7 @@ export class InventoryRepository {
   ): Promise<MediaTechnicalMetadata> {
     const input = createMediaTechnicalMetadataInputSchema.parse(rawInput);
 
-    const record = await this.prisma.mediaTechnicalMetadata.upsert({
+    return this.prisma.mediaTechnicalMetadata.upsert({
       where: { assetId: input.assetId },
       create: {
         ...(input.id ? { id: input.id } : {}),
@@ -625,14 +401,12 @@ export class InventoryRepository {
         ...(input.audioChannels !== undefined ? { audioChannels: input.audioChannels } : {}),
       },
     });
-    return mapPrismaTechnicalMetadataToDomain(record);
   }
 
   async getTechnicalMetadataByAssetId(assetId: string): Promise<MediaTechnicalMetadata | null> {
-    const record = await this.prisma.mediaTechnicalMetadata.findUnique({
+    return this.prisma.mediaTechnicalMetadata.findUnique({
       where: { assetId },
     });
-    return record ? mapPrismaTechnicalMetadataToDomain(record) : null;
   }
 
   // ==========================================================================
@@ -644,7 +418,7 @@ export class InventoryRepository {
   ): Promise<MediaFilenameMetadata> {
     const input = createMediaFilenameMetadataInputSchema.parse(rawInput);
 
-    const record = await this.prisma.mediaFilenameMetadata.upsert({
+    return this.prisma.mediaFilenameMetadata.upsert({
       where: { assetId: input.assetId },
       create: {
         ...(input.id ? { id: input.id } : {}),
@@ -683,16 +457,13 @@ export class InventoryRepository {
         ...(input.rawJson !== undefined ? { rawJson: input.rawJson } : {}),
       },
     });
-    return mapPrismaFilenameMetadataToDomain(record);
   }
 
   async getFilenameMetadataByAssetId(assetId: string): Promise<MediaFilenameMetadata | null> {
-    const record = await this.prisma.mediaFilenameMetadata.findUnique({
+    return this.prisma.mediaFilenameMetadata.findUnique({
       where: { assetId },
     });
-    return record ? mapPrismaFilenameMetadataToDomain(record) : null;
   }
 }
 
 export const defaultInventoryRepository = new InventoryRepository();
-

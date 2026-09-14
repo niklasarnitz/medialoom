@@ -4,7 +4,7 @@ Use Prisma with SQLite and migrations.
 
 Do not use provider IDs as MediaLoom primary keys.
 
-Do not expose Prisma models as public/domain contracts.
+The database schema is the master type structure for domain entities. Expose Prisma models and inferred payload types directly to the rest of the app. Do not create artificial transformation or mapping layers (e.g. `mapPrisma...ToDomain`).
 
 Prefer:
 

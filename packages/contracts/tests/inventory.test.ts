@@ -2,10 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import {
   AssetType,
   assetSchema,
-  assetWithMetadataSchema,
   createAssetInputSchema,
   createEditionInputSchema,
-  createMediaFilenameMetadataInputSchema,
   createMediaVersionInputSchema,
   createMovieInputSchema,
   createScanInputSchema,

@@ -1,14 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { type ScanResult, scanResultSchema } from '@medialoom/contracts';
 import {
-  type MovieWithEditions,
-  type ScanResult,
-  scanResultSchema,
-} from '@medialoom/contracts';
-import {
+  defaultInventoryRepository,
   type InventoryRepository,
   type ListMoviesOptions,
-  defaultInventoryRepository,
+  type MovieWithHierarchy,
 } from '@medialoom/db';
 import { discoverMediaFiles } from '@medialoom/media';
 
@@ -57,7 +54,7 @@ export class InventoryService {
 
           if (existingAsset) {
             // Pragmatic file identity based on canonical path, size, and mtime
-            const sizeMatches = existingAsset.sizeBytes === file.sizeBytes;
+            const sizeMatches = Number(existingAsset.sizeBytes) === Number(file.sizeBytes);
             const mtimeMatches = existingAsset.mtime.getTime() === file.mtime.getTime();
             const wasPresent = existingAsset.present;
 
@@ -167,11 +164,11 @@ export class InventoryService {
     }
   }
 
-  async listItems(options: ListMoviesOptions = {}): Promise<MovieWithEditions[]> {
+  async listItems(options: ListMoviesOptions = {}): Promise<MovieWithHierarchy[]> {
     return this.repo.listMovies(options);
   }
 
-  async getItem(id: string): Promise<MovieWithEditions | null> {
+  async getItem(id: string): Promise<MovieWithHierarchy | null> {
     return this.repo.getMovie(id);
   }
 }

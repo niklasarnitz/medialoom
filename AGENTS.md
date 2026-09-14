@@ -32,6 +32,7 @@ More specific `AGENTS.md` files override general guidance for their area.
 * Scanning and matching never mutate user media.
 * Every MediaLoom filesystem mutation must originate from an explicit `OperationPlan`.
 * Never silently overwrite or delete user files.
+* The database schema is the master type structure for domain entities; build the rest of the app directly on it without artificial transformation or mapping layers (e.g. `mapPrisma...ToDomain`).
 * Infer types from the DB where possible; never create useless or redundant types on your own.
 * Provider-specific and third-party types must not leak into the domain.
 * Do not implement unrelated future stages.

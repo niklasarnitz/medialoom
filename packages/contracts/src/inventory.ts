@@ -367,4 +367,3 @@ export type MediaItem = Movie;
 
 export const mediaItemWithEditionsSchema = movieWithEditionsSchema;
 export type MediaItemWithEditions = MovieWithEditions;
-

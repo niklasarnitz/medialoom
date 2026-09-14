@@ -1,5 +1,5 @@
-import { guessit, type GuessItResult, type GuessitLanguage } from 'guessit-js';
 import path from 'node:path';
+import { type GuessItResult, type GuessitLanguage, guessit } from 'guessit-js';
 
 export interface NormalizedFilenameMetadata {
   title: string | null;
@@ -50,21 +50,37 @@ function normalizeNumber(val: unknown): number | null {
   return null;
 }
 
+const languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
+
+function resolveLanguageName(code: string): string {
+  try {
+    const resolved = languageNames.of(code);
+    if (resolved && resolved.length > 0) {
+      return resolved;
+    }
+  } catch {
+    // Ignore invalid codes and fallback to original
+  }
+  return code;
+}
+
 function formatLanguageItem(item: unknown): string | null {
   if (!item) {
     return null;
   }
   if (typeof item === 'string') {
-    return item.trim();
+    return resolveLanguageName(item.trim());
   }
   if (typeof item === 'object') {
     const lang = item as GuessitLanguage;
-    if (typeof lang.getName === 'function') {
-      const name = lang.getName();
-      if (name) return name;
+    if (typeof lang.name === 'string' && lang.name.length > 0) {
+      return lang.name;
     }
     if (typeof lang.alpha3 === 'string' && lang.alpha3.length > 0) {
-      return lang.alpha3;
+      return resolveLanguageName(lang.alpha3);
+    }
+    if (typeof lang.alpha2 === 'string' && lang.alpha2.length > 0) {
+      return resolveLanguageName(lang.alpha2);
     }
   }
   return String(item);

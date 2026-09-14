@@ -61,7 +61,7 @@ describe('Stage 2 Acceptance Test (Refined Hierarchy)', () => {
     expect(asset.id).toBeDefined();
     expect(asset.mediaVersionId).toBe(version.id);
     expect(asset.type).toBe('VIDEO');
-    expect(asset.sizeBytes).toBe(55_000_000_000);
+    expect(asset.sizeBytes).toBe(55_000_000_000n);
     expect(asset.path).not.toContain('//');
     expect(asset.path).not.toContain('/../');
 

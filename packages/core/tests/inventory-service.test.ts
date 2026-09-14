@@ -127,8 +127,9 @@ describe('InventoryService', () => {
 
     const lotr = items.find((i) => i.title.includes('Fellowship'));
     expect(lotr).toBeDefined();
+    if (!lotr) throw new Error('Expected lotr item');
 
-    const inspected = await service.getItem(lotr!.id);
+    const inspected = await service.getItem(lotr.id);
     expect(inspected).not.toBeNull();
     expect(inspected?.editions[0]?.name).toBe('Extended');
     expect(inspected?.editions[0]?.mediaVersions[0]?.assets[0]?.filenameMetadata?.source).toBe(
