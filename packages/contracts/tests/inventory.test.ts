@@ -189,9 +189,9 @@ describe('Inventory Domain Contracts', () => {
 
       const parsed = movieWithEditionsSchema.parse(hierarchy);
       expect(parsed.editions).toHaveLength(1);
-      expect(parsed.editions[0].mediaVersions).toHaveLength(1);
-      expect(parsed.editions[0].mediaVersions[0].assets).toHaveLength(1);
-      expect(parsed.editions[0].mediaVersions[0].assets[0].technicalMetadata?.videoCodec).toBe(
+      expect(parsed.editions[0]?.mediaVersions).toHaveLength(1);
+      expect(parsed.editions[0]?.mediaVersions[0]?.assets).toHaveLength(1);
+      expect(parsed.editions[0]?.mediaVersions[0]?.assets[0]?.technicalMetadata?.videoCodec).toBe(
         'hevc',
       );
     });
