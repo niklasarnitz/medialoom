@@ -2,6 +2,8 @@
 
 Use TanStack Start idiomatically.
 
+Use Tailwind CSS for all styling.
+
 SSR is the default for initial route data.
 
 Prefer:
