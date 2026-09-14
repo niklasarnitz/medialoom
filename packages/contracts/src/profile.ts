@@ -13,11 +13,23 @@ export const sidecarPlanSchema = z.object({
 });
 export type SidecarPlan = z.infer<typeof sidecarPlanSchema>;
 
+export const movieMediaFilePlanSchema = z.object({
+  mediaVersionId: z.string().optional(),
+  assetId: z.string().optional(),
+  versionLabel: z.string().optional(),
+  mediaFilename: z.string().min(1),
+  relativeMediaPath: z.string().min(1),
+  destinationMediaPath: z.string().min(1),
+  sourceMediaPath: z.string().nullable().optional(),
+});
+export type MovieMediaFilePlan = z.infer<typeof movieMediaFilePlanSchema>;
+
 export const movieLayoutPlanSchema = z.object({
   profile: z.string().min(1),
   destinationRoot: z.string().min(1),
   directory: z.string().min(1),
   destinationDirectory: z.string().min(1),
+  mediaFiles: z.array(movieMediaFilePlanSchema).default([]),
   mediaFilename: z.string().min(1),
   relativeMediaPath: z.string().min(1),
   destinationMediaPath: z.string().min(1),

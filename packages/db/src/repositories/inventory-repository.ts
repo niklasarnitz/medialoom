@@ -30,6 +30,7 @@ import {
   updateMovieInputSchema,
 } from '@medialoom/contracts';
 import type {
+  Asset,
   Edition,
   MediaFilenameMetadata,
   MediaVersion,
@@ -252,6 +253,12 @@ export class InventoryRepository {
     });
   }
 
+  async deleteEdition(id: string): Promise<Edition> {
+    return this.prisma.edition.delete({
+      where: { id },
+    });
+  }
+
   async getEdition(id: string): Promise<EditionWithHierarchy | null> {
     return this.prisma.edition.findUnique({
       where: { id },
@@ -287,6 +294,12 @@ export class InventoryRepository {
     return this.prisma.mediaVersion.update({
       where: { id },
       data: input,
+    });
+  }
+
+  async deleteMediaVersion(id: string): Promise<MediaVersion> {
+    return this.prisma.mediaVersion.delete({
+      where: { id },
     });
   }
 
@@ -341,6 +354,12 @@ export class InventoryRepository {
         ...(input.present !== undefined ? { present: input.present } : {}),
       },
       include: assetIncludeRelations,
+    });
+  }
+
+  async deleteAsset(id: string): Promise<Asset> {
+    return this.prisma.asset.delete({
+      where: { id },
     });
   }
 

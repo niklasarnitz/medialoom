@@ -285,6 +285,7 @@ export const createMediaVersionInputSchema = z.object({
 export type CreateMediaVersionInput = z.input<typeof createMediaVersionInputSchema>;
 
 export const updateMediaVersionInputSchema = z.object({
+  editionId: z.string().min(1).optional(),
   name: z.string().nullable().optional(),
 });
 export type UpdateMediaVersionInput = z.input<typeof updateMediaVersionInputSchema>;

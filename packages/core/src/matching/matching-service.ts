@@ -133,11 +133,7 @@ export class MatchingService {
       if (tmdbId) {
         const existingWithTmdb = await this.inventoryRepo.findMovieByTmdbId(tmdbId);
         if (existingWithTmdb && existingWithTmdb.id !== itemId) {
-          // Re-associate editions from current placeholder to existing canonical Movie
-          for (const edition of item.editions ?? []) {
-            await this.inventoryRepo.updateEdition(edition.id, { movieId: existingWithTmdb.id });
-          }
-          await this.inventoryRepo.deleteMovie(itemId);
+          await this.consolidateMovieIntoExisting(item, existingWithTmdb);
           targetMovieId = existingWithTmdb.id;
         }
       }
@@ -251,11 +247,7 @@ export class MatchingService {
     if (tmdbId) {
       const existingWithTmdb = await this.inventoryRepo.findMovieByTmdbId(tmdbId);
       if (existingWithTmdb && existingWithTmdb.id !== itemId) {
-        // Re-associate editions to existing Movie and delete redundant placeholder
-        for (const edition of item.editions ?? []) {
-          await this.inventoryRepo.updateEdition(edition.id, { movieId: existingWithTmdb.id });
-        }
-        await this.inventoryRepo.deleteMovie(itemId);
+        await this.consolidateMovieIntoExisting(item, existingWithTmdb);
         targetMovieId = existingWithTmdb.id;
       }
     }
@@ -301,6 +293,32 @@ export class MatchingService {
       evaluations: [],
       isManual: true,
     });
+  }
+
+  private async consolidateMovieIntoExisting(
+    sourceItem: MovieWithHierarchy,
+    targetMovie: MovieWithHierarchy,
+  ): Promise<void> {
+    for (const edition of sourceItem.editions ?? []) {
+      const targetEdition = (targetMovie.editions ?? []).find(
+        (e) => (e.name ?? '').trim().toLowerCase() === (edition.name ?? '').trim().toLowerCase(),
+      );
+
+      if (targetEdition) {
+        for (const version of edition.mediaVersions ?? []) {
+          await this.inventoryRepo.updateMediaVersion(version.id, {
+            editionId: targetEdition.id,
+          });
+        }
+        await this.inventoryRepo.deleteEdition(edition.id);
+      } else {
+        await this.inventoryRepo.updateEdition(edition.id, {
+          movieId: targetMovie.id,
+        });
+      }
+    }
+
+    await this.inventoryRepo.deleteMovie(sourceItem.id);
   }
 }
 

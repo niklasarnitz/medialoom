@@ -767,10 +767,21 @@ export async function runCli(
           `MediaLoom Layout Plan (Profile: ${plan.profile})`,
           `  Item ID:       ${itemId}`,
           `  Destination:   ${plan.destinationDirectory}`,
-          `  Media File:    ${plan.mediaFilename}`,
-          `  Media Target:  ${plan.destinationMediaPath}`,
-          '  Sidecars:',
         ];
+
+        if (plan.mediaFiles && plan.mediaFiles.length > 1) {
+          lines.push(`  Media Files (${plan.mediaFiles.length} versions):`);
+          for (const mf of plan.mediaFiles) {
+            const labelStr = mf.versionLabel ? ` [${mf.versionLabel}]` : '';
+            lines.push(`    - ${mf.mediaFilename}${labelStr}`);
+            lines.push(`      Target: ${mf.destinationMediaPath}`);
+          }
+        } else {
+          lines.push(`  Media File:    ${plan.mediaFilename}`);
+          lines.push(`  Media Target:  ${plan.destinationMediaPath}`);
+        }
+
+        lines.push('  Sidecars:');
         for (const sidecar of plan.sidecars) {
           lines.push(
             `    - ${sidecar.filename} (${sidecar.type}, ${sidecar.content.length} bytes)`,
