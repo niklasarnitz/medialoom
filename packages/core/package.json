@@ -11,6 +11,7 @@
     "@medialoom/contracts": "workspace:*",
     "@medialoom/config": "workspace:*",
     "@medialoom/db": "workspace:*",
-    "@medialoom/media": "workspace:*"
+    "@medialoom/media": "workspace:*",
+    "@medialoom/providers": "workspace:*"
   }
 }

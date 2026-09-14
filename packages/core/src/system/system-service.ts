@@ -7,11 +7,22 @@ import {
   type SystemHealth,
   systemHealthSchema,
 } from '@medialoom/contracts';
-import { checkDatabaseConnection } from '@medialoom/db';
+import {
+  checkDatabaseConnection,
+  defaultSettingsRepository,
+  maskApiKey,
+  type SettingsRepository,
+} from '@medialoom/db';
 
 const APP_VERSION = '0.1.0';
 
 export class SystemService {
+  private settingsRepo: SettingsRepository;
+
+  constructor(settingsRepo?: SettingsRepository) {
+    this.settingsRepo = settingsRepo ?? defaultSettingsRepository;
+  }
+
   getVersion(): string {
     return APP_VERSION;
   }
@@ -29,7 +40,32 @@ export class SystemService {
     return systemHealthSchema.parse(health);
   }
 
+  async syncEnvConfig(): Promise<void> {
+    try {
+      const config = getConfig();
+      if (config.TMDB_API_TOKEN) {
+        await this.settingsRepo.syncEnvTmdbApiKey(config.TMDB_API_TOKEN);
+      }
+    } catch {
+      // Ignore if config fails to parse
+    }
+  }
+
+  async getTmdbApiKeyMasked(): Promise<{ configured: boolean; maskedKey: string | null }> {
+    await this.syncEnvConfig();
+    const key = await this.settingsRepo.getTmdbApiKey();
+    return {
+      configured: Boolean(key),
+      maskedKey: maskApiKey(key),
+    };
+  }
+
+  async setTmdbApiKey(key: string): Promise<void> {
+    await this.settingsRepo.setTmdbApiKey(key);
+  }
+
   async getDoctorReport(): Promise<DoctorReportEnvelope> {
+    await this.syncEnvConfig();
     const checks: DoctorCheck[] = [];
 
     // 1. Database Check
@@ -44,6 +80,8 @@ export class SystemService {
     try {
       const config = getConfig();
       const configResult = safeParseConfig(config);
+      const tmdbKey = await this.settingsRepo.getTmdbApiKey();
+
       if (configResult.success) {
         checks.push({
           name: 'configuration',
@@ -51,7 +89,7 @@ export class SystemService {
           message: 'Configuration is valid',
           details: {
             databaseUrlConfigured: Boolean(config.DATABASE_URL),
-            tmdbTokenConfigured: Boolean(config.TMDB_API_TOKEN),
+            tmdbTokenConfigured: Boolean(tmdbKey),
             ffprobePath: config.FFPROBE_PATH,
             logLevel: config.LOG_LEVEL,
           },
@@ -69,6 +107,23 @@ export class SystemService {
         name: 'configuration',
         status: 'error',
         message: `Failed to load configuration: ${message}`,
+      });
+    }
+
+    // 3. TMDb Provider Configuration Check
+    const tmdbKey = await this.settingsRepo.getTmdbApiKey();
+    if (tmdbKey) {
+      checks.push({
+        name: 'tmdb',
+        status: 'ok',
+        message: 'TMDb API key is configured',
+      });
+    } else {
+      checks.push({
+        name: 'tmdb',
+        status: 'warn',
+        message:
+          'TMDb API key is not configured. Metadata lookups will be unavailable.',
       });
     }
 
