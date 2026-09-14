@@ -14,7 +14,10 @@ import {
 } from './tmdb-errors';
 import { tmdbMovieDetailsResponseSchema, tmdbMovieSearchResponseSchema } from './tmdb-schemas';
 
-export type FetchFunction = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+export type FetchFunction = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
 
 export interface TmdbMovieProviderOptions {
   apiKey?: string;
